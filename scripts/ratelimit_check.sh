@@ -229,21 +229,91 @@ print(f'MESSAGES={messages}')
     fi
 fi
 
-# --- 3b: Codex context from panes ---
+# --- 3b: Codex /status from pane (no pane movement — use -J to join wrapped lines) ---
 declare -A CODEX_CONTEXT
 CODEX_WARNINGS=""
 CODEX_STATUS="OK"
 
+# Shared quota (same ChatGPT Pro account — capture from first idle agent with /status)
+CODEX_ACCT_5H_LEFT=""
+CODEX_ACCT_5H_RESET=""
+CODEX_ACCT_7D_LEFT=""
+CODEX_ACCT_7D_RESET=""
+CODEX_MODEL_5H_LEFT=""
+CODEX_MODEL_5H_RESET=""
+CODEX_MODEL_7D_LEFT=""
+CODEX_MODEL_7D_RESET=""
+CODEX_MODEL_LABEL=""
+
 if [[ ${#CODEX_AGENTS[@]} -gt 0 ]]; then
+    _rl_quota_done=false
+
     for agent in "${CODEX_AGENTS[@]}"; do
         pane="${AGENT_PANE[$agent]}"
-        ctx=$(tmux capture-pane -t "$pane" -p 2>/dev/null \
-            | grep -oE '[0-9]+% context left' | tail -1 \
+
+        # Context: read from status bar (always visible, no /status needed)
+        ctx=$(tmux capture-pane -t "$pane" -p -S -5 2>/dev/null \
+            | grep -oE '[0-9]+% left' | tail -1 \
             | grep -oE '[0-9]+' || echo "?")
         [[ -z "$ctx" ]] && ctx="?"
         CODEX_CONTEXT["$agent"]="$ctx"
 
-        # Check thresholds
+        # Quota: send /status to first agent, parse with -J (join wrapped lines)
+        if ! $_rl_quota_done; then
+            # Check if /status output already in scrollback
+            _has_status=$(tmux capture-pane -t "$pane" -p -J -S -60 2>/dev/null \
+                | grep -c '5h limit:' || true)
+
+            if [[ "$_has_status" -lt 2 ]]; then
+                # Send /status and wait for output
+                tmux send-keys -t "$pane" '/status' 2>/dev/null
+                sleep 0.3
+                tmux send-keys -t "$pane" Enter 2>/dev/null
+                sleep 2
+            fi
+
+            # Capture with -J to join wrapped lines across narrow pane
+            _status_out=$(tmux capture-pane -t "$pane" -p -J -S -60 2>/dev/null || echo "")
+
+            # Extract all "5h limit:" and "Weekly limit:" lines
+            # First occurrence = account-level, second = model-level
+            _5h_lines=$(echo "$_status_out" | grep '5h limit:')
+            _wk_lines=$(echo "$_status_out" | grep 'Weekly limit:')
+
+            # Account 5h (first line)
+            _line=$(echo "$_5h_lines" | head -1)
+            if [[ -n "$_line" ]]; then
+                CODEX_ACCT_5H_LEFT=$(echo "$_line" | grep -oE '[0-9]+% left' | grep -oE '[0-9]+')
+                CODEX_ACCT_5H_RESET=$(echo "$_line" | sed -n 's/.*resets \([^)]*\)).*/\1/p')
+            fi
+            # Account Weekly (first line)
+            _line=$(echo "$_wk_lines" | head -1)
+            if [[ -n "$_line" ]]; then
+                CODEX_ACCT_7D_LEFT=$(echo "$_line" | grep -oE '[0-9]+% left' | grep -oE '[0-9]+')
+                CODEX_ACCT_7D_RESET=$(echo "$_line" | sed -n 's/.*resets \([^)]*\)).*/\1/p')
+            fi
+
+            # Model label (e.g., "GPT-5.3-Codex-Spark")
+            CODEX_MODEL_LABEL=$(echo "$_status_out" | grep -oE 'GPT-[^ ]* limit:' | head -1 | sed 's/ limit:$//')
+
+            # Model 5h (second line)
+            _line=$(echo "$_5h_lines" | sed -n '2p')
+            if [[ -n "$_line" ]]; then
+                CODEX_MODEL_5H_LEFT=$(echo "$_line" | grep -oE '[0-9]+% left' | grep -oE '[0-9]+')
+                CODEX_MODEL_5H_RESET=$(echo "$_line" | sed -n 's/.*resets \([^)]*\)).*/\1/p')
+            fi
+            # Model Weekly (second line)
+            _line=$(echo "$_wk_lines" | sed -n '2p')
+            if [[ -n "$_line" ]]; then
+                CODEX_MODEL_7D_LEFT=$(echo "$_line" | grep -oE '[0-9]+% left' | grep -oE '[0-9]+')
+                CODEX_MODEL_7D_RESET=$(echo "$_line" | sed -n 's/.*resets \([^)]*\)).*/\1/p')
+            fi
+
+            # Mark done if we got at least account 5h
+            [[ -n "$CODEX_ACCT_5H_LEFT" ]] && _rl_quota_done=true
+        fi
+
+        # Check context thresholds
         if [[ "$ctx" != "?" ]]; then
             if [[ "$ctx" -lt "$CODEX_CONTEXT_CRIT" ]]; then
                 CODEX_WARNINGS="${CODEX_WARNINGS} ${agent}(${ctx}%)!!"
@@ -389,6 +459,27 @@ if [[ ${#CODEX_AGENTS[@]} -gt 0 ]]; then
         fi
     done
     printf "\n"
+
+    # Quota display from /status
+    printf "  Quota (%s)\n" "${codex_model:-gpt-5.3-codex}"
+    if [[ -n "$CODEX_ACCT_5H_LEFT" ]]; then
+        printf "  5h limit: %s%% left (resets %s)\n" "$CODEX_ACCT_5H_LEFT" "$CODEX_ACCT_5H_RESET"
+    else
+        printf "  5h limit: N/A\n"
+    fi
+    if [[ -n "$CODEX_ACCT_7D_LEFT" ]]; then
+        printf "  Weekly limit: %s%% left (resets %s)\n" "$CODEX_ACCT_7D_LEFT" "$CODEX_ACCT_7D_RESET"
+    else
+        printf "  Weekly limit: N/A\n"
+    fi
+    # Model-level quota
+    if [[ -n "$CODEX_MODEL_5H_LEFT" ]]; then
+        printf "  %s:\n" "${CODEX_MODEL_LABEL:-Model}"
+        printf "  5h limit: %s%% left (resets %s)\n" "$CODEX_MODEL_5H_LEFT" "$CODEX_MODEL_5H_RESET"
+        if [[ -n "$CODEX_MODEL_7D_LEFT" ]]; then
+            printf "  Weekly limit: %s%% left (resets %s)\n" "$CODEX_MODEL_7D_LEFT" "$CODEX_MODEL_7D_RESET"
+        fi
+    fi
 
     printf "  Limit hits (1h): %d\n" "$CODEX_LIMIT_HITS"
 

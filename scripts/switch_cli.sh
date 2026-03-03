@@ -57,10 +57,27 @@ usage() {
 }
 
 # ─── Agent ID → tmux pane 解決 ───
+# @agent_id メタデータから動的にペインを検索する（ペイン番号のズレに対応）
+# フォールバック: メタデータが見つからない場合は従来の固定マッピングを使用
 resolve_pane() {
     local agent_id="$1"
-    # multiagent セッションの pane 番号体系
-    # shutsujin_departure.sh: karo=0, ashigaru1=1, ..., ashigaru7=7, gunshi=8
+
+    # Phase 1: @agent_id メタデータから動的検索
+    local pane_count
+    pane_count=$(tmux list-panes -t "multiagent:agents" 2>/dev/null | wc -l)
+    if [[ "$pane_count" -gt 0 ]]; then
+        for i in $(seq 0 $((pane_count - 1))); do
+            local aid
+            aid=$(tmux display-message -t "multiagent:agents.$i" -p '#{@agent_id}' 2>/dev/null)
+            if [[ "$aid" == "$agent_id" ]]; then
+                echo "multiagent:agents.$i"
+                return 0
+            fi
+        done
+        log "WARN: @agent_id=$agent_id not found in any pane. Falling back to fixed mapping."
+    fi
+
+    # Phase 2: フォールバック（従来の固定マッピング）
     local pane_base
     pane_base=$(tmux show-options -t multiagent -v @pane_base 2>/dev/null || echo "0")
 
@@ -329,6 +346,20 @@ if [ -z "$PANE_TARGET" ]; then
     exit 1
 fi
 log "=== Starting CLI switch for ${AGENT_ID} (pane: ${PANE_TARGET}) ==="
+
+# Step 0.5: --model指定時に--type未指定なら、モデル名からCLI種別を自動推定
+if [[ -n "$NEW_MODEL" && -z "$NEW_TYPE" ]]; then
+    case "$NEW_MODEL" in
+        gpt-5.3-codex*|gpt-5-codex*)
+            NEW_TYPE="codex"
+            log "Auto-inferred type=codex from model=${NEW_MODEL}"
+            ;;
+        claude-*)
+            NEW_TYPE="claude"
+            log "Auto-inferred type=claude from model=${NEW_MODEL}"
+            ;;
+    esac
+fi
 
 # Step 1: settings.yaml 更新（--type/--model 指定時のみ）
 if [[ -n "$NEW_TYPE" || -n "$NEW_MODEL" ]]; then

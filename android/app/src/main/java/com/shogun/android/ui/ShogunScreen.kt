@@ -15,6 +15,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -25,9 +26,8 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Send
-import androidx.compose.material.icons.filled.Headphones
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.MusicOff
+import androidx.compose.material.icons.filled.VolumeOff
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.lifecycle.Lifecycle
@@ -35,6 +35,9 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import com.shogun.android.ui.theme.*
+import com.shogun.android.util.Defaults
+import com.shogun.android.util.PrefsKeys
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -53,7 +56,8 @@ import com.shogun.android.viewmodel.ShogunViewModel
 fun ShogunScreen(
     viewModel: ShogunViewModel = viewModel(),
     mediaPlayer: MediaPlayer? = null,
-    bgmTrackIndex: Int = -1,
+    isBgmPlaying: Boolean = false,
+    bgmTrackLabel: String = "",
     onBgmToggle: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -66,7 +70,7 @@ fun ShogunScreen(
     var isInputExpanded by remember { mutableStateOf(false) }
 
     // Duck BGM while voice input is active
-    LaunchedEffect(isListening, mediaPlayer) {
+    LaunchedEffect(isListening) {
         if (isListening) {
             mediaPlayer?.setVolume(0.05f, 0.05f)
         } else {
@@ -77,12 +81,16 @@ fun ShogunScreen(
     val listState = rememberLazyListState()
     val lines = remember(paneContent) { paneContent.lines() }
 
-    val speechRecognizer = remember { SpeechRecognizer.createSpeechRecognizer(context) }
+    val speechRecognizer = remember {
+        if (SpeechRecognizer.isRecognitionAvailable(context))
+            SpeechRecognizer.createSpeechRecognizer(context)
+        else null
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) {
+        if (granted && speechRecognizer != null) {
             startContinuousListening(speechRecognizer, { isListening }) { result ->
                 val newText = if (inputTextValue.text.isEmpty()) result else "${inputTextValue.text} $result"
                 inputTextValue = TextFieldValue(text = newText, selection = TextRange(newText.length))
@@ -93,12 +101,12 @@ fun ShogunScreen(
 
     // Auto-connect on composition
     LaunchedEffect(Unit) {
-        val prefs = context.getSharedPreferences("shogun_prefs", android.content.Context.MODE_PRIVATE)
-        val host = prefs.getString("ssh_host", "192.168.1.1") ?: "192.168.1.1"
-        val port = prefs.getString("ssh_port", "22")?.toIntOrNull() ?: 22
-        val user = prefs.getString("ssh_user", "") ?: ""
-        val keyPath = prefs.getString("ssh_key_path", "") ?: ""
-        val password = prefs.getString("ssh_password", "") ?: ""
+        val prefs = context.getSharedPreferences(PrefsKeys.PREFS_NAME, android.content.Context.MODE_PRIVATE)
+        val host = prefs.getString(PrefsKeys.SSH_HOST, Defaults.SSH_HOST) ?: Defaults.SSH_HOST
+        val port = prefs.getString(PrefsKeys.SSH_PORT, Defaults.SSH_PORT_STR)?.toIntOrNull() ?: Defaults.SSH_PORT
+        val user = prefs.getString(PrefsKeys.SSH_USER, "") ?: ""
+        val keyPath = prefs.getString(PrefsKeys.SSH_KEY_PATH, "") ?: ""
+        val password = prefs.getString(PrefsKeys.SSH_PASSWORD, "") ?: ""
         viewModel.connect(host, port, user, keyPath, password)
     }
 
@@ -109,7 +117,7 @@ fun ShogunScreen(
             when (event) {
                 Lifecycle.Event.ON_RESUME -> {
                     viewModel.resumeRefresh()
-                    if (isListening) {
+                    if (isListening && speechRecognizer != null) {
                         startContinuousListening(speechRecognizer, { isListening }) { result ->
                             val newText = if (inputTextValue.text.isEmpty()) result else "${inputTextValue.text} $result"
                             inputTextValue = TextFieldValue(text = newText, selection = TextRange(newText.length))
@@ -118,7 +126,7 @@ fun ShogunScreen(
                 }
                 Lifecycle.Event.ON_PAUSE -> {
                     viewModel.pauseRefresh()
-                    speechRecognizer.cancel()
+                    speechRecognizer?.cancel()
                 }
                 else -> {}
             }
@@ -137,7 +145,7 @@ fun ShogunScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF1A1A1A))
+            .background(Shikkoku)
     ) {
         Image(
             painter = painterResource(R.drawable.bg_shogun),
@@ -151,13 +159,13 @@ fun ShogunScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(if (isConnected) Color(0xFF3C6E47) else Color(0xFFCC3333))
+                .background(if (isConnected) Matsuba else Kurenai)
                 .padding(4.dp),
             horizontalArrangement = Arrangement.Center
         ) {
             Text(
                 text = if (isConnected) "接続中 — 将軍セッション" else "未接続",
-                color = Color(0xFFE8DCC8),
+                color = Zouge,
                 fontSize = 12.sp
             )
         }
@@ -172,7 +180,7 @@ fun ShogunScreen(
             if (errorMessage != null) {
                 Text(
                     text = "エラー: $errorMessage",
-                    color = Color(0xFFCC3333),
+                    color = Kurenai,
                     fontFamily = FontFamily.Monospace,
                     fontSize = 13.sp,
                     modifier = Modifier.padding(8.dp)
@@ -185,13 +193,15 @@ fun ShogunScreen(
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     items(lines) { line ->
-                        Text(
-                            text = parseAnsiColors(line),
-                            color = Color(0xFFE8DCC8),
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 13.sp,
-                            softWrap = false
-                        )
+                        SelectionContainer {
+                            Text(
+                                text = parseAnsiColors(line),
+                                color = Zouge,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 13.sp,
+                                softWrap = false
+                            )
+                        }
                     }
                 }
             }
@@ -214,17 +224,17 @@ fun ShogunScreen(
                 value = inputTextValue,
                 onValueChange = { inputTextValue = it },
                 modifier = Modifier.weight(1f),
-                placeholder = { Text("コマンドを入力", color = Color(0xFF666666)) },
+                placeholder = { Text("コマンドを入力", color = TextMuted) },
                 singleLine = !isInputExpanded,
                 maxLines = if (isInputExpanded) 6 else 1,
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = Color(0xFFE8DCC8),
-                    unfocusedTextColor = Color(0xFFE8DCC8),
-                    focusedBorderColor = Color(0x99C9A94E),
-                    unfocusedBorderColor = Color(0x33C9A94E),
-                    cursorColor = Color(0xFFC9A94E),
-                    focusedContainerColor = Color(0xFF1E1E1E),
-                    unfocusedContainerColor = Color(0xFF1E1E1E),
+                    focusedTextColor = Zouge,
+                    unfocusedTextColor = Zouge,
+                    focusedBorderColor = BorderFocus,
+                    unfocusedBorderColor = BorderStandard,
+                    cursorColor = Kinpaku,
+                    focusedContainerColor = Surface4,
+                    unfocusedContainerColor = Surface4,
                 )
             )
 
@@ -236,7 +246,7 @@ fun ShogunScreen(
                 Icon(
                     imageVector = if (isInputExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                     contentDescription = "展開",
-                    tint = Color(0xFFC9A94E)
+                    tint = Kinpaku
                 )
             }
         }
@@ -245,25 +255,28 @@ fun ShogunScreen(
             horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // BGM toggle button — cycles OFF → Track1 → Track2 → Track3 → OFF
+            // BGM toggle button — cycles through 3 tracks + OFF
             IconButton(onClick = onBgmToggle) {
-                val trackLabels = listOf("将軍", "令和", "足軽")
-                val (icon, tint) = when (bgmTrackIndex) {
-                    0 -> Icons.Default.MusicNote to Color(0xFFC9A94E)      // gold
-                    1 -> Icons.Default.Headphones to Color(0xFF4ECDC4)     // teal
-                    2 -> Icons.Default.MusicNote to Color(0xFFFF6B6B)      // red
-                    else -> Icons.Default.MusicOff to Color(0xFF666666)    // gray = OFF
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        imageVector = if (isBgmPlaying) Icons.Default.VolumeUp else Icons.Default.VolumeOff,
+                        contentDescription = "BGM",
+                        tint = if (isBgmPlaying) Kinpaku else TextMuted
+                    )
+                    if (isBgmPlaying && bgmTrackLabel.isNotEmpty()) {
+                        Text(
+                            text = bgmTrackLabel,
+                            color = Kinpaku,
+                            fontSize = 8.sp
+                        )
+                    }
                 }
-                Icon(
-                    imageVector = icon,
-                    contentDescription = if (bgmTrackIndex >= 0) "BGM: ${trackLabels[bgmTrackIndex]}" else "BGM OFF",
-                    tint = tint
-                )
             }
 
             // Voice input button (manual ON/OFF — stays on until user taps again)
             IconButton(
                 onClick = {
+                    if (speechRecognizer == null) return@IconButton
                     if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
                         == PackageManager.PERMISSION_GRANTED
                     ) {
@@ -285,7 +298,7 @@ fun ShogunScreen(
                 Icon(
                     imageVector = Icons.Default.Mic,
                     contentDescription = "音声入力",
-                    tint = if (isListening) Color(0xFFCC3333) else Color(0xFFC9A94E)
+                    tint = if (isListening) Kurenai else Kinpaku
                 )
             }
 
@@ -302,7 +315,7 @@ fun ShogunScreen(
                 Icon(
                     imageVector = Icons.Default.Send,
                     contentDescription = "送信",
-                    tint = if (inputTextValue.text.isNotBlank() && isConnected && !isListening) Color(0xFFC9A94E) else Color(0xFF666666)
+                    tint = if (inputTextValue.text.isNotBlank() && isConnected && !isListening) Kinpaku else TextMuted
                 )
             }
         } // Row (buttons)
@@ -336,10 +349,10 @@ fun SpecialKeysRow(onSendKey: (String) -> Unit) {
                 onClick = { onSendKey(value) },
                 modifier = Modifier.height(32.dp),
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                border = BorderStroke(1.dp, Color(0x99C9A94E)),
+                border = BorderStroke(1.dp, BorderFocus),
                 colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = Color(0xFF1E1E1E),
-                    contentColor = Color(0xFFE8DCC8)
+                    containerColor = Surface4,
+                    contentColor = Zouge
                 )
             ) {
                 Text(

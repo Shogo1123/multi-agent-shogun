@@ -7,6 +7,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.shogun.android.SshForegroundService
 import com.shogun.android.ssh.SshManager
+import com.shogun.android.util.Defaults
+import com.shogun.android.util.PrefsKeys
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,6 +19,7 @@ import kotlinx.coroutines.launch
 class ShogunViewModel(application: Application) : AndroidViewModel(application) {
 
     private val sshManager = SshManager.getInstance()
+    private val prefs = application.getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
 
     private val _paneContent = MutableStateFlow("")
     val paneContent: StateFlow<String> = _paneContent
@@ -31,15 +34,17 @@ class ShogunViewModel(application: Application) : AndroidViewModel(application) 
     private var reconnectJob: Job? = null
     @Volatile private var paused = false
 
+    private fun tmuxTarget(): String {
+        val session = prefs.getString(PrefsKeys.SHOGUN_SESSION, Defaults.SHOGUN_SESSION) ?: Defaults.SHOGUN_SESSION
+        return "$session:main"
+    }
+
     fun pauseRefresh() { paused = true }
     fun resumeRefresh() {
         paused = false
-        // Trigger immediate refresh on resume
         viewModelScope.launch {
             if (sshManager.isConnected()) {
-                val prefs = getApplication<Application>().getSharedPreferences("shogun_prefs", Context.MODE_PRIVATE)
-                val shogunSession = prefs.getString("shogun_session", "shogun") ?: "shogun"
-                val result = sshManager.execCommand("/usr/bin/tmux capture-pane -t $shogunSession:main -p -e -S -500")
+                val result = sshManager.execCommand("${Defaults.TMUX} capture-pane -t ${tmuxTarget()} -p -e -S -500")
                 if (result.isSuccess) {
                     _paneContent.value = result.getOrDefault("")
                     _errorMessage.value = null
@@ -71,11 +76,9 @@ class ShogunViewModel(application: Application) : AndroidViewModel(application) 
     private fun startAutoRefresh() {
         refreshJob?.cancel()
         refreshJob = viewModelScope.launch {
-            val prefs = getApplication<Application>().getSharedPreferences("shogun_prefs", Context.MODE_PRIVATE)
             while (isActive) {
                 if (!paused && sshManager.isConnected()) {
-                    val shogunSession = prefs.getString("shogun_session", "shogun") ?: "shogun"
-                    val result = sshManager.execCommand("/usr/bin/tmux capture-pane -t $shogunSession:main -p -e -S -500")
+                    val result = sshManager.execCommand("${Defaults.TMUX} capture-pane -t ${tmuxTarget()} -p -e -S -500")
                     if (result.isSuccess) {
                         _paneContent.value = result.getOrDefault("")
                         _errorMessage.value = null
@@ -90,16 +93,15 @@ class ShogunViewModel(application: Application) : AndroidViewModel(application) 
 
     fun sendCommand(text: String) {
         viewModelScope.launch {
-            val prefs = getApplication<Application>().getSharedPreferences("shogun_prefs", Context.MODE_PRIVATE)
-            val shogunSession = prefs.getString("shogun_session", "shogun") ?: "shogun"
+            val target = tmuxTarget()
             val escaped = text.replace("'", "'\\''")
             // Send text and Enter SEPARATELY with 0.3s gap (Claude Code requirement)
-            sshManager.execCommand("/usr/bin/tmux send-keys -t $shogunSession:main '$escaped'")
+            sshManager.execCommand("${Defaults.TMUX} send-keys -t $target '$escaped'")
             delay(300)
-            sshManager.execCommand("/usr/bin/tmux send-keys -t $shogunSession:main Enter")
+            sshManager.execCommand("${Defaults.TMUX} send-keys -t $target Enter")
             delay(1500)
             if (sshManager.isConnected()) {
-                val result = sshManager.execCommand("/usr/bin/tmux capture-pane -t $shogunSession:main -p -e -S -500")
+                val result = sshManager.execCommand("${Defaults.TMUX} capture-pane -t $target -p -e -S -500")
                 if (result.isSuccess) {
                     _paneContent.value = result.getOrDefault("")
                 }
@@ -128,9 +130,13 @@ class ShogunViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun startForegroundService() {
-        val ctx = getApplication<Application>()
-        val intent = Intent(ctx, SshForegroundService::class.java)
-        ctx.startForegroundService(intent)
+        try {
+            val ctx = getApplication<Application>()
+            val intent = Intent(ctx, SshForegroundService::class.java)
+            ctx.startForegroundService(intent)
+        } catch (_: Exception) {
+            // Foreground service start blocked by system — SSH works without it
+        }
     }
 
     private fun stopForegroundService() {

@@ -2,14 +2,16 @@ package com.shogun.android.ssh
 
 import android.content.Context
 import android.net.Uri
+import com.jcraft.jsch.ChannelExec
 import com.jcraft.jsch.ChannelSftp
-import com.jcraft.jsch.ChannelShell
 import com.jcraft.jsch.JSch
 import com.jcraft.jsch.Session
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import com.shogun.android.util.AppLogger
 import java.io.ByteArrayOutputStream
-import java.io.OutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -24,10 +26,12 @@ class SshManager private constructor() {
         }
     }
 
-    private var session: Session? = null
-    private var shellChannel: ChannelShell? = null
-    @Volatile private var shellOutputStream: OutputStream? = null
-    private var readerThread: Thread? = null
+    @Volatile private var session: Session? = null
+
+    // Mutex serializes ALL SSH operations (exec, reconnect, connect).
+    // Prevents race condition where multiple ViewModels' concurrent reconnects
+    // kill each other's newly-created sessions.
+    private val sshMutex = Mutex()
 
     // Stored for reconnect
     private var lastHost = ""
@@ -36,7 +40,6 @@ class SshManager private constructor() {
     private var lastKeyPath = ""
     private var lastPassword = ""
 
-    var outputCallback: ((String) -> Unit)? = null
     var disconnectCallback: (() -> Unit)? = null
 
     suspend fun connect(
@@ -48,17 +51,22 @@ class SshManager private constructor() {
         onOutput: ((String) -> Unit)? = null,
         onDisconnect: (() -> Unit)? = null
     ): Result<Unit> = withContext(Dispatchers.IO) {
-        if (onOutput != null) outputCallback = onOutput
         if (onDisconnect != null) disconnectCallback = onDisconnect
 
-        if (isConnected()) return@withContext Result.success(Unit)
+        sshMutex.withLock {
+            if (isConnectedInternal()) {
+                AppLogger.log("SSH", "Already connected, skipping")
+                return@withContext Result.success(Unit)
+            }
 
-        lastHost = host
-        lastPort = port
-        lastUser = user
-        lastKeyPath = privateKeyPath
-        lastPassword = password
-        connectInternal()
+            AppLogger.log("SSH", "Connecting to $host:$port user=$user key=${privateKeyPath.takeLast(20)}")
+            lastHost = host
+            lastPort = port
+            lastUser = user
+            lastKeyPath = privateKeyPath
+            lastPassword = password
+            connectInternal()
+        }
     }
 
     private fun connectInternal(): Result<Unit> {
@@ -95,114 +103,138 @@ class SshManager private constructor() {
                 override fun showMessage(message: String) {}
             }
             newSession.userInfo = userInfo
+            // No aggressive keepalive — Tailscale VPN delays cause false disconnects
+            // Disconnect detection handled by exec retry logic instead
             newSession.connect(10000)
             session = newSession
-            openShell()
+            // Verify exec channel works immediately after connect
+            val testResult = execCommandInternal(newSession, "echo ssh_exec_ok")
+            if (testResult.isSuccess) {
+                val out = testResult.getOrDefault("").trim()
+                AppLogger.log("SSH", "Connected OK (exec verified: $out)")
+            } else {
+                AppLogger.log("SSH", "Connected but exec FAILED: ${testResult.exceptionOrNull()?.message}")
+            }
             Result.success(Unit)
         } catch (e: Exception) {
+            AppLogger.log("SSH", "Connect FAILED: ${e.message}")
             Result.failure(Exception("SSH接続失敗 (pw=${lastPassword.trim().length}文字): ${e.message}", e))
         }
     }
 
-    private fun openShell() {
-        val s = session ?: return
-        val channel = s.openChannel("shell") as ChannelShell
-        channel.setPty(false)
-        channel.connect(5000)
-        shellChannel = channel
-        shellOutputStream = channel.outputStream
+    fun isConnected(): Boolean = session?.isConnected == true
+    private fun isConnectedInternal(): Boolean = session?.isConnected == true
 
-        readerThread?.interrupt()
-        readerThread = Thread {
-            val inputStream = channel.inputStream
-            val buffer = ByteArray(4096)
-            try {
-                while (!Thread.currentThread().isInterrupted) {
-                    val n = inputStream.read(buffer)
-                    if (n == -1) {
-                        disconnectCallback?.invoke()
-                        break
-                    }
-                    if (n > 0) {
-                        outputCallback?.invoke(String(buffer, 0, n, Charsets.UTF_8))
+    /**
+     * Execute a remote command via SSH exec channel.
+     * All operations are serialized by sshMutex to prevent concurrent reconnect storms.
+     * On session failure, reconnects and retries once.
+     */
+    suspend fun execCommand(cmd: String): Result<String> = withContext(Dispatchers.IO) {
+        sshMutex.withLock {
+            val s = session
+            if (s == null || !s.isConnected) {
+                AppLogger.log("SSH", "exec: session dead, reconnecting...")
+                val reconn = reconnectLocked()
+                if (reconn.isFailure) {
+                    disconnectCallback?.invoke()
+                    return@withContext Result.failure(IllegalStateException("SSH not connected"))
+                }
+            }
+
+            val currentSession = session
+            if (currentSession == null) {
+                return@withContext Result.failure(IllegalStateException("SSH not connected"))
+            }
+
+            val result = execCommandInternal(currentSession, cmd)
+            if (result.isSuccess) {
+                return@withContext result
+            }
+
+            // Session died mid-exec — reconnect and retry once
+            val errorMsg = result.exceptionOrNull()?.message ?: ""
+            if (errorMsg.contains("channel is not opened") || errorMsg.contains("session is down")) {
+                AppLogger.log("SSH", "exec failed (session dead), auto-reconnecting...")
+                val reconn = reconnectLocked()
+                if (reconn.isSuccess) {
+                    val retrySession = session
+                    if (retrySession != null) {
+                        AppLogger.log("SSH", "Retrying exec after reconnect...")
+                        return@withContext execCommandInternal(retrySession, cmd)
                     }
                 }
-            } catch (_: InterruptedException) {
-                Thread.currentThread().interrupt()
-            } catch (_: Exception) {
                 disconnectCallback?.invoke()
             }
-        }.apply { isDaemon = true; start() }
-    }
 
-    fun sendCommand(cmd: String) {
-        try {
-            shellOutputStream?.let {
-                it.write((cmd + "\n").toByteArray(Charsets.UTF_8))
-                it.flush()
-            }
-        } catch (_: Exception) {
-            // Disconnect detected by reader thread
+            result
         }
     }
 
-    fun isConnected(): Boolean = session?.isConnected == true
-
-    suspend fun execCommand(cmd: String): Result<String> = withContext(Dispatchers.IO) {
-        val s = session
-        if (s == null || !s.isConnected) {
-            return@withContext Result.failure(IllegalStateException("SSH not connected"))
+    /**
+     * Reconnect while sshMutex is already held.
+     * No synchronization needed — caller holds the mutex.
+     */
+    private fun reconnectLocked(): Result<Unit> {
+        AppLogger.log("SSH", "reconnectLocked: disconnecting old session...")
+        session?.disconnect()
+        session = null
+        val result = connectInternal()
+        if (result.isSuccess) {
+            AppLogger.log("SSH", "reconnectLocked: success")
+        } else {
+            AppLogger.log("SSH", "reconnectLocked: failed: ${result.exceptionOrNull()?.message}")
         }
-        try {
-            val channel = s.openChannel("exec")
-            val execChannel = channel as com.jcraft.jsch.ChannelExec
-            execChannel.setCommand(cmd)
-            val outputStream = ByteArrayOutputStream()
-            execChannel.outputStream = outputStream
-            execChannel.connect(5000)
-            while (!execChannel.isClosed) {
-                Thread.sleep(100)
+        return result
+    }
+
+    private fun execCommandInternal(s: Session, cmd: String): Result<String> {
+        val shortCmd = if (cmd.length > 80) cmd.take(80) + "..." else cmd
+        return try {
+            val channel = s.openChannel("exec") as ChannelExec
+            channel.setCommand(cmd)
+            val inputStream = channel.inputStream
+            channel.connect(5000)
+            val baos = ByteArrayOutputStream()
+            val buffer = ByteArray(4096)
+            while (true) {
+                val n = inputStream.read(buffer)
+                if (n < 0) break
+                baos.write(buffer, 0, n)
             }
-            execChannel.disconnect()
-            Result.success(outputStream.toString("UTF-8"))
+            channel.disconnect()
+            val out = baos.toString("UTF-8")
+            AppLogger.log("SSH", "exec OK (${out.length}ch): $shortCmd")
+            Result.success(out)
         } catch (e: Exception) {
+            val trace = e.stackTraceToString().take(500)
+            AppLogger.log("SSH", "exec FAIL: ${e.message} cmd=$shortCmd")
+            AppLogger.log("SSH", "exec TRACE: $trace")
             Result.failure(e)
         }
     }
 
     suspend fun reconnect(maxAttempts: Int = 3, delayMs: Long = 5000): Result<Unit> =
         withContext(Dispatchers.IO) {
+            AppLogger.log("SSH", "reconnect start (max=$maxAttempts)")
             var lastError: Exception? = null
             for (attempt in 0 until maxAttempts) {
-                cleanupChannels()
-                val result = if (session?.isConnected == true) {
-                    try {
-                        openShell()
-                        Result.success(Unit)
-                    } catch (e: Exception) {
-                        Result.failure(e)
-                    }
-                } else {
+                sshMutex.withLock {
                     session?.disconnect()
                     session = null
-                    connectInternal()
+                    val result = connectInternal()
+                    if (result.isSuccess) return@withContext Result.success(Unit)
+                    lastError = result.exceptionOrNull() as? Exception
+                    AppLogger.log("SSH", "reconnect attempt ${attempt + 1} failed: ${lastError?.message}")
                 }
-                if (result.isSuccess) return@withContext Result.success(Unit)
-                lastError = result.exceptionOrNull() as? Exception
                 if (attempt < maxAttempts - 1) Thread.sleep(delayMs)
             }
             Result.failure(lastError ?: Exception("再接続失敗（${maxAttempts}回試行）"))
         }
 
-    private fun cleanupChannels() {
-        readerThread?.interrupt()
-        shellChannel?.disconnect()
-        shellChannel = null
-        shellOutputStream = null
-    }
-
     suspend fun uploadScreenshot(context: Context, imageUri: Uri, projectPath: String = ""): Result<String> =
         withContext(Dispatchers.IO) {
+            sshMutex.withLock {
             val s = session
             if (s == null || !s.isConnected) {
                 return@withContext Result.failure(IllegalStateException("SSH not connected"))
@@ -227,10 +259,11 @@ class SshManager private constructor() {
             } catch (e: Exception) {
                 Result.failure(e)
             }
+            } // sshMutex.withLock
         }
 
     fun disconnect() {
-        cleanupChannels()
+        AppLogger.log("SSH", "disconnect() called")
         session?.disconnect()
         session = null
     }

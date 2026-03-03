@@ -5,6 +5,7 @@ import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.shogun.android.ssh.SshManager
+import com.shogun.android.util.PrefsKeys
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -12,6 +13,7 @@ import kotlinx.coroutines.launch
 class DashboardViewModel(application: Application) : AndroidViewModel(application) {
 
     private val sshManager = SshManager.getInstance()
+    private val prefs = application.getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
 
     private val _markdownContent = MutableStateFlow("")
     val markdownContent: StateFlow<String> = _markdownContent
@@ -40,8 +42,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     fun loadDashboard() {
         viewModelScope.launch {
             _isLoading.value = true
-            val prefs = getApplication<Application>().getSharedPreferences("shogun_prefs", Context.MODE_PRIVATE)
-            val projectPath = prefs.getString("project_path", "") ?: ""
+            val projectPath = prefs.getString(PrefsKeys.PROJECT_PATH, "") ?: ""
             if (projectPath.isBlank()) {
                 _errorMessage.value = "設定画面でプロジェクトパスを設定してください"
                 _isLoading.value = false
@@ -60,6 +61,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
     override fun onCleared() {
         super.onCleared()
-        sshManager.disconnect()
+        // Do NOT disconnect the shared singleton SshManager here.
+        // Tab navigation triggers onCleared, killing the connection for all ViewModels.
     }
 }

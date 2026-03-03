@@ -304,6 +304,7 @@ get_model_display_name() {
     local short=""
     case "$model" in
         *spark*)                short="Spark" ;;
+        gpt-5.3-codex)          short="Codex5.3" ;;
         *codex*|gpt-5.3)        short="Codex" ;;
         *opus*)                 short="Opus" ;;
         *sonnet*)               short="Sonnet" ;;
@@ -320,10 +321,15 @@ get_model_display_name() {
             ;;
     esac
 
-    # Thinking表示: 明示的に設定されている場合のみ "+T" を付与
-    # thinking: true → "+T", thinking: false or 未設定 → なし
-    if [[ "$thinking" == "true" || "$thinking" == "True" ]]; then
-        echo "${short}+T"
+    # Thinking表示: Claude系はデフォルトONなので、falseの時だけ非表示
+    # Claude: thinking: false → なし, それ以外(true/未設定) → "+T"
+    # Codex等: Thinkingなし → 常になし
+    if [[ "$cli_type" == "claude" ]]; then
+        if [[ "$thinking" == "false" || "$thinking" == "False" ]]; then
+            echo "$short"
+        else
+            echo "${short}+T"
+        fi
     else
         echo "$short"
     fi

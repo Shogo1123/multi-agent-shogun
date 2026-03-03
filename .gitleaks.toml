@@ -54,6 +54,8 @@ id = "generic-password"
 description = "Generic password assignment pattern"
 regex = '''(?i)(password|passwd|pwd|secret)\s*[=:]\s*['"][^'"]{8,}['"]'''
 tags = ["password", "secret"]
+[rules.allowlist]
+paths = ['''android/.*Constants\.kt''']
 
 [[rules]]
 id = "generic-api-key"

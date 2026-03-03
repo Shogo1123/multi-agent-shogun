@@ -1,8 +1,15 @@
 package com.shogun.android.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -11,36 +18,62 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import com.shogun.android.ui.theme.*
+import com.shogun.android.util.Defaults
+import com.shogun.android.util.PrefsKeys
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.shogun.android.util.AppLogger
+import com.shogun.android.viewmodel.SettingsViewModel
 
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(settingsViewModel: SettingsViewModel = viewModel()) {
     val context = LocalContext.current
-    val prefs = context.getSharedPreferences("shogun_prefs", Context.MODE_PRIVATE)
+    val prefs = context.getSharedPreferences(PrefsKeys.PREFS_NAME, Context.MODE_PRIVATE)
 
-    var host by remember { mutableStateOf(prefs.getString("ssh_host", "192.168.1.1") ?: "192.168.1.1") }
-    var port by remember { mutableStateOf(prefs.getString("ssh_port", "22") ?: "22") }
-    var user by remember { mutableStateOf(prefs.getString("ssh_user", "") ?: "") }
-    var keyPath by remember { mutableStateOf(prefs.getString("ssh_key_path", "") ?: "") }
-    var password by remember { mutableStateOf(prefs.getString("ssh_password", "") ?: "") }
-    var projectPath by remember { mutableStateOf(prefs.getString("project_path", "") ?: "") }
-    var shogunSession by remember { mutableStateOf(prefs.getString("shogun_session", "shogun") ?: "shogun") }
-    var agentsSession by remember { mutableStateOf(prefs.getString("agents_session", "multiagent") ?: "multiagent") }
+    var host by remember { mutableStateOf(prefs.getString(PrefsKeys.SSH_HOST, Defaults.SSH_HOST) ?: Defaults.SSH_HOST) }
+    var port by remember { mutableStateOf(prefs.getString(PrefsKeys.SSH_PORT, Defaults.SSH_PORT_STR) ?: Defaults.SSH_PORT_STR) }
+    var user by remember { mutableStateOf(prefs.getString(PrefsKeys.SSH_USER, "") ?: "") }
+    var keyPath by remember { mutableStateOf(prefs.getString(PrefsKeys.SSH_KEY_PATH, "") ?: "") }
+    var password by remember { mutableStateOf(prefs.getString(PrefsKeys.SSH_PASSWORD, "") ?: "") }
+    var projectPath by remember { mutableStateOf(prefs.getString(PrefsKeys.PROJECT_PATH, "") ?: "") }
+    var shogunSession by remember { mutableStateOf(prefs.getString(PrefsKeys.SHOGUN_SESSION, Defaults.SHOGUN_SESSION) ?: Defaults.SHOGUN_SESSION) }
+    var agentsSession by remember { mutableStateOf(prefs.getString(PrefsKeys.AGENTS_SESSION, Defaults.AGENTS_SESSION) ?: Defaults.AGENTS_SESSION) }
 
     var saved by remember { mutableStateOf(false) }
+    var tapCount by remember { mutableIntStateOf(0) }
+    var showDebugLog by remember { mutableStateOf(false) }
+
+    // Debug log dialog
+    if (showDebugLog) {
+        DebugLogDialog(onDismiss = { showDebugLog = false })
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF1A1A1A))
+            .background(Shikkoku)
             .padding(16.dp)
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("SSH設定", style = MaterialTheme.typography.titleLarge, color = Color(0xFFC9A94E))
+        Text(
+            "SSH設定",
+            style = MaterialTheme.typography.titleLarge,
+            color = Kinpaku,
+            modifier = Modifier.clickable {
+                tapCount++
+                if (tapCount >= 7) {
+                    showDebugLog = true
+                    tapCount = 0
+                }
+            }
+        )
 
         OutlinedTextField(
             value = host,
@@ -86,7 +119,7 @@ fun SettingsScreen() {
 
         Divider()
 
-        Text("プロジェクト設定", style = MaterialTheme.typography.titleMedium, color = Color(0xFFC9A94E))
+        Text("プロジェクト設定", style = MaterialTheme.typography.titleMedium, color = Kinpaku)
 
         OutlinedTextField(
             value = projectPath,
@@ -99,7 +132,7 @@ fun SettingsScreen() {
 
         Divider()
 
-        Text("セッション設定", style = MaterialTheme.typography.titleMedium, color = Color(0xFFC9A94E))
+        Text("セッション設定", style = MaterialTheme.typography.titleMedium, color = Kinpaku)
 
         OutlinedTextField(
             value = shogunSession,
@@ -117,23 +150,29 @@ fun SettingsScreen() {
             singleLine = true
         )
 
+        Divider()
+
+        NtfySettingsSection(viewModel = settingsViewModel)
+
+        Divider()
+
         Button(
             onClick = {
                 prefs.edit()
-                    .putString("ssh_host", host)
-                    .putString("ssh_port", port)
-                    .putString("ssh_user", user)
-                    .putString("ssh_key_path", keyPath)
-                    .putString("ssh_password", password)
-                    .putString("project_path", projectPath)
-                    .putString("shogun_session", shogunSession)
-                    .putString("agents_session", agentsSession)
+                    .putString(PrefsKeys.SSH_HOST, host)
+                    .putString(PrefsKeys.SSH_PORT, port)
+                    .putString(PrefsKeys.SSH_USER, user)
+                    .putString(PrefsKeys.SSH_KEY_PATH, keyPath)
+                    .putString(PrefsKeys.SSH_PASSWORD, password)
+                    .putString(PrefsKeys.PROJECT_PATH, projectPath)
+                    .putString(PrefsKeys.SHOGUN_SESSION, shogunSession)
+                    .putString(PrefsKeys.AGENTS_SESSION, agentsSession)
                     .apply()
                 saved = true
             },
             modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFFB33B24),
+                containerColor = Shuaka,
                 contentColor = Color.White
             ),
             shape = RoundedCornerShape(4.dp)
@@ -148,4 +187,66 @@ fun SettingsScreen() {
             )
         }
     }
+}
+
+@Composable
+fun DebugLogDialog(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val entries = remember { AppLogger.getEntries() }
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(entries.size) {
+        if (entries.isNotEmpty()) listState.scrollToItem(entries.size - 1)
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Shikkoku,
+        title = {
+            Text("Debug Log (${entries.size})", color = Kinpaku)
+        },
+        text = {
+            Column {
+                // Copy to clipboard button
+                TextButton(onClick = {
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    val clip = ClipData.newPlainText("debug_log", entries.joinToString("\n"))
+                    clipboard.setPrimaryClip(clip)
+                    Toast.makeText(context, "ログをコピーしました", Toast.LENGTH_SHORT).show()
+                }) {
+                    Text("Copy All", color = Kinpaku)
+                }
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(380.dp)
+                ) {
+                    items(entries) { entry ->
+                        Text(
+                            text = entry,
+                            color = if (entry.contains("FAIL") || entry.contains("ERROR"))
+                                Color(0xFFCC3333) else Color(0xFFAABBCC),
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 10.sp,
+                            modifier = Modifier.padding(vertical = 1.dp)
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                AppLogger.clear()
+                onDismiss()
+            }) {
+                Text("Clear & Close", color = Kinpaku)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close", color = Color(0xFF888888))
+            }
+        }
+    )
 }

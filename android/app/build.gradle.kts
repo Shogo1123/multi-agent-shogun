@@ -62,6 +62,7 @@ dependencies {
     implementation(libs.markwon.core)
     implementation(libs.markwon.ext.tables)
     implementation(libs.accompanist.swiperefresh)
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

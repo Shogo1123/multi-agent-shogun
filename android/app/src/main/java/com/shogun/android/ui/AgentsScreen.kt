@@ -14,13 +14,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -34,6 +32,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import com.shogun.android.ui.theme.*
+import com.shogun.android.util.Defaults
+import com.shogun.android.util.PrefsKeys
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -62,9 +63,22 @@ private data class ClaudeMaxInfo(
     val sessions: Int?,
     val messages: Int?
 )
+private data class CodexQuotaInfo(
+    val account5h: WindowInfo?,
+    val account7d: WindowInfo?,
+    val model5h: WindowInfo?,
+    val model7d: WindowInfo?,
+    val modelName: String?
+)
 private data class CodexEntry(val ashigaru: Int, val percent: Float?) // null = unknown
 
-private fun parseRateLimitResult(text: String): Pair<ClaudeMaxInfo, List<CodexEntry>> {
+private data class RateLimitData(
+    val claudeMax: ClaudeMaxInfo,
+    val codexQuota: CodexQuotaInfo,
+    val codexEntries: List<CodexEntry>
+)
+
+private fun parseRateLimitResult(text: String): RateLimitData {
     val window5h = Regex("""5h window:\s+([\d.]+)%.*\(resets ([^)]+)\)""").find(text)?.let {
         WindowInfo(it.groupValues[1].toFloatOrNull() ?: 0f, it.groupValues[2])
     }
@@ -79,6 +93,21 @@ private fun parseRateLimitResult(text: String): Pair<ClaudeMaxInfo, List<CodexEn
 
     val claudeMax = ClaudeMaxInfo(window5h, window7d, sonnet7d, opus7d, todayTokens, sessions, messages)
 
+    // Codex quota: "5h limit: NN% left (resets HH:MM)" — note: "left" not "used"
+    val quotaRegex5h = Regex("""5h limit:\s+(\d+)% left\s+\(resets ([^)]+)\)""")
+    val quotaRegex7d = Regex("""Weekly limit:\s+(\d+)% left\s+\(resets ([^)]+)\)""")
+    val all5h = quotaRegex5h.findAll(text).toList()
+    val all7d = quotaRegex7d.findAll(text).toList()
+
+    // First match = account-level, second = model-level
+    val acct5h = all5h.getOrNull(0)?.let { WindowInfo(100f - (it.groupValues[1].toFloatOrNull() ?: 0f), it.groupValues[2]) }
+    val acct7d = all7d.getOrNull(0)?.let { WindowInfo(100f - (it.groupValues[1].toFloatOrNull() ?: 0f), it.groupValues[2]) }
+    val mdl5h  = all5h.getOrNull(1)?.let { WindowInfo(100f - (it.groupValues[1].toFloatOrNull() ?: 0f), it.groupValues[2]) }
+    val mdl7d  = all7d.getOrNull(1)?.let { WindowInfo(100f - (it.groupValues[1].toFloatOrNull() ?: 0f), it.groupValues[2]) }
+    val modelName = Regex("""Quota \(([^)]+)\)""").find(text)?.groupValues?.get(1)
+
+    val codexQuota = CodexQuotaInfo(acct5h, acct7d, mdl5h, mdl7d, modelName)
+
     val codexEntries = mutableListOf<CodexEntry>()
     Regex("""(\d+):(\d+)%""").findAll(text).forEach { m ->
         val ash = m.groupValues[1].toIntOrNull() ?: return@forEach
@@ -89,12 +118,12 @@ private fun parseRateLimitResult(text: String): Pair<ClaudeMaxInfo, List<CodexEn
         if (codexEntries.none { it.ashigaru == ash }) codexEntries.add(CodexEntry(ash, null))
     }
     codexEntries.sortBy { it.ashigaru }
-    return Pair(claudeMax, codexEntries)
+    return RateLimitData(claudeMax, codexQuota, codexEntries)
 }
 
 private fun rateLimitBarColor(percent: Float): Color = when {
     percent >= 80f -> Color(0xFFCC4444)
-    percent >= 50f -> Color(0xFFC9A94E)
+    percent >= 50f -> Kinpaku
     else           -> Color(0xFF4CAF50)
 }
 
@@ -119,8 +148,7 @@ private fun formatResetTime(resetStr: String): String {
             if (ld.isBefore(today)) {
                 "$dateStr にリセット済み"
             } else {
-                val dow = ld.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, locale)
-                "${ld.monthValue}/${ld.dayOfMonth}($dow) にリセット"
+                "$dateStr にリセット"
             }
         }
     } catch (_: Exception) {
@@ -145,12 +173,12 @@ fun AgentsScreen(
     val selectedPane = selectedPaneIndex?.let { idx -> panes.find { it.index == idx } }
 
     LaunchedEffect(Unit) {
-        val prefs = context.getSharedPreferences("shogun_prefs", android.content.Context.MODE_PRIVATE)
-        val host = prefs.getString("ssh_host", "192.168.1.1") ?: "192.168.1.1"
-        val port = prefs.getString("ssh_port", "22")?.toIntOrNull() ?: 22
-        val user = prefs.getString("ssh_user", "") ?: ""
-        val keyPath = prefs.getString("ssh_key_path", "") ?: ""
-        val password = prefs.getString("ssh_password", "") ?: ""
+        val prefs = context.getSharedPreferences(PrefsKeys.PREFS_NAME, android.content.Context.MODE_PRIVATE)
+        val host = prefs.getString(PrefsKeys.SSH_HOST, Defaults.SSH_HOST) ?: Defaults.SSH_HOST
+        val port = prefs.getString(PrefsKeys.SSH_PORT, Defaults.SSH_PORT_STR)?.toIntOrNull() ?: Defaults.SSH_PORT
+        val user = prefs.getString(PrefsKeys.SSH_USER, "") ?: ""
+        val keyPath = prefs.getString(PrefsKeys.SSH_KEY_PATH, "") ?: ""
+        val password = prefs.getString(PrefsKeys.SSH_PASSWORD, "") ?: ""
         viewModel.connect(host, port, user, keyPath, password)
     }
 
@@ -183,7 +211,7 @@ fun AgentsScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFF1A1A1A))
+                .background(Shikkoku)
         ) {
             Image(
                 painter = painterResource(R.drawable.bg_agents),
@@ -194,16 +222,18 @@ fun AgentsScreen(
             )
             Column(modifier = Modifier.fillMaxSize()) {
                 if (errorMessage != null) {
-                    Text(
-                        text = "エラー: $errorMessage",
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(8.dp)
-                    )
+                    SelectionContainer {
+                        Text(
+                            text = "エラー: $errorMessage",
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(8.dp)
+                        )
+                    }
                 }
 
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
                     contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 72.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -227,8 +257,8 @@ fun AgentsScreen(
                     .align(Alignment.BottomEnd)
                     .padding(16.dp)
                     .size(48.dp),
-                containerColor = Color(0xFF2D2D2D),
-                contentColor = Color(0xFFC9A94E)
+                containerColor = Sumi,
+                contentColor = Kinpaku
             ) {
                 Icon(
                     imageVector = Icons.Default.Speed,
@@ -246,7 +276,9 @@ fun AgentsScreen(
                     viewModel.clearRateLimitResult()
                 },
                 title = {
-                    Text("Claude レートリミット", color = Color(0xFFC9A94E))
+                    SelectionContainer {
+                        Text("Rate Limit Check", color = Kinpaku)
+                    }
                 },
                 text = {
                     if (rateLimitLoading) {
@@ -256,7 +288,7 @@ fun AgentsScreen(
                                 .padding(vertical = 16.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            CircularProgressIndicator(color = Color(0xFFC9A94E))
+                            CircularProgressIndicator(color = Kinpaku)
                         }
                     } else {
                         RateLimitContent(rawText = rateLimitResult ?: "")
@@ -267,12 +299,14 @@ fun AgentsScreen(
                         showRateLimitDialog = false
                         viewModel.clearRateLimitResult()
                     }) {
-                        Text("閉じる", color = Color(0xFFC9A94E))
+                        SelectionContainer {
+                            Text("閉じる", color = Kinpaku)
+                        }
                     }
                 },
-                containerColor = Color(0xFF2D2D2D),
-                titleContentColor = Color(0xFFC9A94E),
-                textContentColor = Color(0xFFE8DCC8)
+                containerColor = Sumi,
+                titleContentColor = Kinpaku,
+                textContentColor = Zouge
             )
         }
     }
@@ -290,22 +324,37 @@ fun PaneCard(
             .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = Color(0x802D2D2D))
     ) {
-        Column(modifier = Modifier.padding(8.dp)) {
-            Text(
-                text = pane.agentId.ifBlank { "pane${pane.index}" },
-                color = Color(0xFFC9A94E),
-                fontSize = 12.sp,
-                fontFamily = FontFamily.Monospace
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = parseAnsiColors(pane.content),
-                color = Color(0xFFE8DCC8),
-                fontSize = 10.sp,
-                fontFamily = FontFamily.Monospace,
-                maxLines = 10,
-                overflow = TextOverflow.Ellipsis
-            )
+        SelectionContainer {
+            Column(modifier = Modifier.padding(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = pane.agentId.ifBlank { "pane${pane.index}" },
+                        color = Kinpaku,
+                        fontSize = 12.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    if (pane.modelName.isNotBlank()) {
+                        Text(
+                            text = " (${pane.modelName})",
+                            color = Color(0xFFAAAAAA),
+                            fontSize = 10.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                val tailLines = remember(pane.content) {
+                    pane.content.lines().dropLastWhile { it.isBlank() }.takeLast(10).joinToString("\n")
+                }
+                Text(
+                    text = parseAnsiColors(tailLines),
+                    color = Zouge,
+                    fontSize = 10.sp,
+                    fontFamily = FontFamily.Monospace,
+                    maxLines = 10,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }
@@ -320,18 +369,23 @@ fun PaneFullScreen(
     val context = LocalContext.current
     var commandTextValue by remember { mutableStateOf(TextFieldValue("")) }
     var isListening by remember { mutableStateOf(false) }
-    val speechRecognizer = remember { SpeechRecognizer.createSpeechRecognizer(context) }
-    val listState = rememberLazyListState()
-    val lines = remember(pane.content) { pane.content.lines() }
+    val speechRecognizer = remember {
+        if (SpeechRecognizer.isRecognitionAvailable(context))
+            SpeechRecognizer.createSpeechRecognizer(context)
+        else null
+    }
+    val horizontalScrollState = rememberScrollState()
+    val verticalScrollState = rememberScrollState()
+    val parsedPaneContent = remember(pane.content) { parseAnsiColors(pane.content) }
 
     DisposableEffect(Unit) {
-        onDispose { speechRecognizer.destroy() }
+        onDispose { speechRecognizer?.destroy() }
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) {
+        if (granted && speechRecognizer != null) {
             startContinuousListening(speechRecognizer, { isListening }) { result ->
                 val newText = if (commandTextValue.text.isEmpty()) result else "${commandTextValue.text} $result"
                 commandTextValue = TextFieldValue(text = newText, selection = TextRange(newText.length))
@@ -340,17 +394,15 @@ fun PaneFullScreen(
         }
     }
 
-    // Auto-scroll to bottom
-    LaunchedEffect(lines.size) {
-        if (lines.isNotEmpty()) {
-            listState.scrollToItem(lines.size - 1)
-        }
+    // Keep following the newest output while preserving text-selection support.
+    LaunchedEffect(pane.content, verticalScrollState.maxValue) {
+        verticalScrollState.scrollTo(verticalScrollState.maxValue)
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF1A1A1A))
+            .background(Shikkoku)
     ) {
         Image(
             painter = painterResource(R.drawable.bg_agents),
@@ -363,7 +415,7 @@ fun PaneFullScreen(
         modifier = Modifier.fillMaxSize()
     ) {
         // Top bar with agent name and back button
-        Row(
+                Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Color(0x802D2D2D))
@@ -374,16 +426,30 @@ fun PaneFullScreen(
                 Icon(
                     imageVector = Icons.Default.ArrowBack,
                     contentDescription = "戻る",
-                    tint = Color(0xFFC9A94E)
+                    tint = Kinpaku
                 )
             }
-            Text(
-                text = pane.agentId.ifBlank { "pane${pane.index}" },
-                color = Color(0xFFC9A94E),
-                fontSize = 16.sp,
-                fontFamily = FontFamily.Monospace,
-                modifier = Modifier.weight(1f)
-            )
+            SelectionContainer {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = pane.agentId.ifBlank { "pane${pane.index}" },
+                        color = Kinpaku,
+                        fontSize = 16.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    if (pane.modelName.isNotBlank()) {
+                        Text(
+                            text = " (${pane.modelName})",
+                            color = Color(0xFFAAAAAA),
+                            fontSize = 12.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
+            }
         }
 
         // Full screen pane content
@@ -391,24 +457,21 @@ fun PaneFullScreen(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
+                .horizontalScroll(horizontalScrollState)
         ) {
-        LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .fillMaxHeight()
-                .padding(horizontal = 8.dp, vertical = 4.dp)
-        ) {
-            items(lines) { line ->
+            SelectionContainer {
                 Text(
-                    text = parseAnsiColors(line),
-                    color = Color(0xFFE8DCC8),
+                    text = parsedPaneContent,
+                    color = Zouge,
                     fontFamily = FontFamily.Monospace,
                     fontSize = 13.sp,
-                    softWrap = false
+                    softWrap = false,
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .verticalScroll(verticalScrollState)
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
                 )
             }
-        }
         } // Box (horizontal scroll)
 
         // Special keys bar
@@ -432,6 +495,7 @@ fun PaneFullScreen(
             // Voice input button
             IconButton(
                 onClick = {
+                    if (speechRecognizer == null) return@IconButton
                     if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
                         == PackageManager.PERMISSION_GRANTED
                     ) {
@@ -453,7 +517,7 @@ fun PaneFullScreen(
                 Icon(
                     imageVector = Icons.Default.Mic,
                     contentDescription = "音声入力",
-                    tint = if (isListening) Color(0xFFCC3333) else Color(0xFFC9A94E)
+                    tint = if (isListening) Kurenai else Kinpaku
                 )
             }
             Spacer(modifier = Modifier.width(4.dp))
@@ -469,7 +533,7 @@ fun PaneFullScreen(
                 Icon(
                     imageVector = Icons.Default.Send,
                     contentDescription = "送信",
-                    tint = if (commandTextValue.text.isNotBlank() && !isListening) Color(0xFFC9A94E) else Color(0xFF666666)
+                    tint = if (commandTextValue.text.isNotBlank() && !isListening) Kinpaku else TextMuted
                 )
             }
         }
@@ -480,35 +544,39 @@ fun PaneFullScreen(
 // ── Rate Limit UI ─────────────────────────────────────────────────────────────
 @Composable
 private fun RateLimitContent(rawText: String) {
-    val (claudeMax, codexEntries) = remember(rawText) { parseRateLimitResult(rawText) }
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        // ── Claude Max section ──
-        Text("Claude Max", color = Color(0xFFC9A94E), fontSize = 13.sp, fontFamily = FontFamily.Monospace)
-        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF555555)))
+    val data = remember(rawText) { parseRateLimitResult(rawText) }
+    val claudeMax = data.claudeMax
+    val codexQuota = data.codexQuota
+    val codexEntries = data.codexEntries
+    SelectionContainer {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            // ── Claude Max section ──
+            Text("Claude Max", color = Kinpaku, fontSize = 13.sp, fontFamily = FontFamily.Monospace)
+            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF555555)))
 
-        claudeMax.window5h?.let { w ->
-            val color = rateLimitBarColor(w.percent)
-            Text("5時間枠", color = Color(0xFFE8DCC8), fontSize = 12.sp)
-            LinearProgressIndicator(
-                progress = { w.percent / 100f },
-                modifier = Modifier.fillMaxWidth(),
-                color = color,
-                trackColor = Color(0xFF444444)
-            )
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("${w.percent}%", color = color, fontSize = 11.sp)
-                Text(formatResetTime(w.resetStr), color = Color(0xFF888888), fontSize = 11.sp)
+            claudeMax.window5h?.let { w ->
+                val color = rateLimitBarColor(w.percent)
+                Text("5時間枠", color = Zouge, fontSize = 12.sp)
+                LinearProgressIndicator(
+                    progress = { w.percent / 100f },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = color,
+                    trackColor = Color(0xFF444444)
+                )
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("${w.percent}%", color = color, fontSize = 11.sp)
+                    Text(formatResetTime(w.resetStr), color = Color(0xFF888888), fontSize = 11.sp)
+                }
             }
-        }
 
         claudeMax.window7d?.let { w ->
             val color = rateLimitBarColor(w.percent)
-            Text("7日枠", color = Color(0xFFE8DCC8), fontSize = 12.sp)
+            Text("7日枠", color = Zouge, fontSize = 12.sp)
             LinearProgressIndicator(
                 progress = { w.percent / 100f },
                 modifier = Modifier.fillMaxWidth(),
@@ -528,8 +596,8 @@ private fun RateLimitContent(rawText: String) {
         }
 
         claudeMax.todayTokens?.let { tokens ->
-            Text("本日トークン", color = Color(0xFFE8DCC8), fontSize = 12.sp)
-            Text(tokens, color = Color(0xFFC9A94E), fontSize = 15.sp, fontFamily = FontFamily.Monospace)
+            Text("本日トークン", color = Zouge, fontSize = 12.sp)
+            Text(tokens, color = Kinpaku, fontSize = 15.sp, fontFamily = FontFamily.Monospace)
         }
 
         if (claudeMax.sessions != null || claudeMax.messages != null) {
@@ -539,44 +607,109 @@ private fun RateLimitContent(rawText: String) {
             }
         }
 
-        // ── Codex section (only if data present) ──
+        // ── Codex Quota section ──
+        if (codexQuota.account5h != null || codexQuota.model5h != null) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text("ChatGPT Pro クォータ", color = Kinpaku, fontSize = 13.sp, fontFamily = FontFamily.Monospace)
+            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF555555)))
+
+            // Account-level quota
+            codexQuota.account5h?.let { w ->
+                val color = rateLimitBarColor(w.percent)
+                Text("Account 5時間枠", color = Zouge, fontSize = 12.sp)
+                LinearProgressIndicator(
+                    progress = { w.percent / 100f },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = color,
+                    trackColor = Color(0xFF444444)
+                )
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("${w.percent.toInt()}% used", color = color, fontSize = 11.sp)
+                    Text("resets ${w.resetStr}", color = Color(0xFF888888), fontSize = 11.sp)
+                }
+            }
+            codexQuota.account7d?.let { w ->
+                val color = rateLimitBarColor(w.percent)
+                Text("Account Weekly", color = Zouge, fontSize = 12.sp)
+                LinearProgressIndicator(
+                    progress = { w.percent / 100f },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = color,
+                    trackColor = Color(0xFF444444)
+                )
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("${w.percent.toInt()}% used", color = color, fontSize = 11.sp)
+                    Text("resets ${w.resetStr}", color = Color(0xFF888888), fontSize = 11.sp)
+                }
+            }
+
+            // Model-level quota
+            if (codexQuota.model5h != null) {
+                val label = codexQuota.modelName ?: "Model"
+                codexQuota.model5h.let { w ->
+                    val color = rateLimitBarColor(w.percent)
+                    Text("$label 5時間枠", color = Zouge, fontSize = 12.sp)
+                    LinearProgressIndicator(
+                        progress = { w.percent / 100f },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = color,
+                        trackColor = Color(0xFF444444)
+                    )
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("${w.percent.toInt()}% used", color = color, fontSize = 11.sp)
+                        Text("resets ${w.resetStr}", color = Color(0xFF888888), fontSize = 11.sp)
+                    }
+                }
+                codexQuota.model7d?.let { w ->
+                    val color = rateLimitBarColor(w.percent)
+                    Text("$label Weekly", color = Zouge, fontSize = 12.sp)
+                    LinearProgressIndicator(
+                        progress = { w.percent / 100f },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = color,
+                        trackColor = Color(0xFF444444)
+                    )
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("${w.percent.toInt()}% used", color = color, fontSize = 11.sp)
+                        Text("resets ${w.resetStr}", color = Color(0xFF888888), fontSize = 11.sp)
+                    }
+                }
+            }
+        }
+
+        // ── Codex context per agent ──
         if (codexEntries.isNotEmpty()) {
             Spacer(modifier = Modifier.height(4.dp))
-            Text("Codex コンテキスト残量", color = Color(0xFFC9A94E), fontSize = 13.sp, fontFamily = FontFamily.Monospace)
+            Text("Codex5.3 コンテキスト", color = Kinpaku, fontSize = 13.sp, fontFamily = FontFamily.Monospace)
             Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF555555)))
+
             codexEntries.forEach { entry ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        "ash${entry.ashigaru}",
-                        color = Color(0xFFE8DCC8),
-                        fontSize = 11.sp,
-                        fontFamily = FontFamily.Monospace,
-                        modifier = Modifier.width(40.dp)
-                    )
-                    if (entry.percent != null) {
-                        val color = rateLimitBarColor(entry.percent)
+                val label = "ash${entry.ashigaru}"
+                val pct = entry.percent
+                if (pct != null) {
+                    val usedPct = 100f - pct
+                    val color = rateLimitBarColor(usedPct)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(label, color = Zouge, fontSize = 11.sp, modifier = Modifier.width(40.dp))
                         LinearProgressIndicator(
-                            progress = { entry.percent / 100f },
+                            progress = { usedPct / 100f },
                             modifier = Modifier.weight(1f),
                             color = color,
                             trackColor = Color(0xFF444444)
                         )
-                        Text("${entry.percent.toInt()}%", color = color, fontSize = 11.sp)
-                    } else {
-                        LinearProgressIndicator(
-                            progress = { 0f },
-                            modifier = Modifier.weight(1f),
-                            color = Color(0xFF555555),
-                            trackColor = Color(0xFF444444)
-                        )
-                        Text("---", color = Color(0xFF888888), fontSize = 11.sp)
+                        Text("${pct.toInt()}%", color = color, fontSize = 11.sp)
+                    }
+                } else {
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        Text("$label: ?", color = Color(0xFF888888), fontSize = 11.sp)
                     }
                 }
             }
+        }
         }
     }
 }
