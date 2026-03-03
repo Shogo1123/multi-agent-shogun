@@ -116,6 +116,10 @@ fi
 # Time-based escalation: track how long unread messages have been waiting
 FIRST_UNREAD_SEEN=${FIRST_UNREAD_SEEN:-0}
 LAST_CLEAR_TS=${LAST_CLEAR_TS:-0}
+# Tracks when the agent last had an idle flag. If flag is absent >MAX_BUSY_TIMEOUT,
+# force-idle to recover from stop_hook failures (e.g. after context compaction).
+BUSY_SINCE_TS=${BUSY_SINCE_TS:-0}
+MAX_BUSY_TIMEOUT=${MAX_BUSY_TIMEOUT:-600}  # 10 minutes
 ESCALATE_PHASE1=${ESCALATE_PHASE1:-120}
 ESCALATE_PHASE2=${ESCALATE_PHASE2:-240}
 ESCALATE_COOLDOWN=${ESCALATE_COOLDOWN:-300}
@@ -717,8 +721,28 @@ agent_is_busy() {
     local effective_cli
     effective_cli=$(get_effective_cli_type)
     if [[ "$effective_cli" == "claude" ]]; then
-        # フラグファイル方式: フラグなし=busy(return 0)、あり=idle(return 1)
-        [ ! -f "${IDLE_FLAG_DIR:-/tmp}/shogun_idle_${AGENT_ID}" ]
+        # Flag-file method: flag present = idle (return 1), absent = busy (return 0).
+        # Safety: if flag is absent for >MAX_BUSY_TIMEOUT seconds (e.g. stop_hook missed
+        # after context compaction), force-idle to prevent permanent lockout.
+        local idle_flag="${IDLE_FLAG_DIR:-/tmp}/shogun_idle_${AGENT_ID}"
+        if [ -f "$idle_flag" ]; then
+            BUSY_SINCE_TS=0  # reset — agent is confirmed idle
+            return 1  # idle
+        fi
+        # Flag absent: track how long we've been in this state
+        local now_check
+        now_check=$(date +%s)
+        if [ "${BUSY_SINCE_TS:-0}" -eq 0 ]; then
+            BUSY_SINCE_TS="$now_check"
+        fi
+        local busy_elapsed=$(( now_check - BUSY_SINCE_TS ))
+        if [ "$busy_elapsed" -gt "${MAX_BUSY_TIMEOUT:-600}" ]; then
+            echo "[$(date)] [FORCE-IDLE] Agent ${AGENT_ID} has no idle flag for ${busy_elapsed}s (stop_hook likely missed) — forcing idle" >&2
+            touch "$idle_flag"
+            BUSY_SINCE_TS=0
+            return 1  # force-idle
+        fi
+        return 0  # still busy
     else
         # 従来のpane解析（Codex等フォールバック）
         agent_is_busy_check "$PANE_TARGET"

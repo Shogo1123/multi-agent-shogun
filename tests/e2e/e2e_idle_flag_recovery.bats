@@ -137,3 +137,45 @@ wait_for_log() {
     stop_inbox_watcher "$watcher_pid"
     rm -rf "$flag_dir"
 }
+
+# ═══ E2E-010-C: claude CLI型でのforce-idle（stop_hook未発火シミュレート） ═══
+
+@test "E2E-010-C: claude CLI force-idle after MAX_BUSY_TIMEOUT with missing idle flag" {
+    # Simulates stop_hook failure (e.g. after context compaction):
+    # idle flag never exists → watcher must force-idle after MAX_BUSY_TIMEOUT.
+    local ashigaru1_pane
+    ashigaru1_pane=$(pane_target 1)
+    local flag_dir log_file watcher_pid
+
+    flag_dir="$(mktemp -d "/tmp/e2e_idle_flags_timeout_XXXXXX")"
+    local ashigaru_idle_flag="$flag_dir/shogun_idle_ashigaru1"
+    # Intentionally do NOT create idle flag — simulates stop_hook not firing
+
+    cp "$PROJECT_ROOT/tests/e2e/fixtures/task_ashigaru1_basic.yaml" \
+        "$E2E_QUEUE/queue/tasks/ashigaru1.yaml"
+
+    # Write a message so inotifywait fires quickly (avoids 30s wait)
+    bash "$E2E_QUEUE/scripts/inbox_write.sh" "ashigaru1" \
+        "タスクYAMLを読んで作業開始せよ。" "task_assigned" "karo"
+
+    log_file="/tmp/e2e_watcher_force_idle_${BASHPID}.log"
+    watcher_pid=$(
+        IDLE_FLAG_DIR="$flag_dir" \
+        MAX_BUSY_TIMEOUT=5 \
+        INOTIFY_TIMEOUT=3 \
+        bash "$E2E_QUEUE/scripts/inbox_watcher.sh" "ashigaru1" "$ashigaru1_pane" "claude" \
+            > "$log_file" 2>&1 &
+        echo $!
+    )
+
+    # FORCE-IDLE log should appear after ~5-8s (MAX_BUSY_TIMEOUT=5 + one loop)
+    run wait_for_log "$log_file" "[FORCE-IDLE]" 30
+    assert_success
+
+    # force-idle recreates the flag
+    run wait_for_file_within "$ashigaru_idle_flag" 5
+    assert_success
+
+    stop_inbox_watcher "$watcher_pid"
+    rm -rf "$flag_dir"
+}
