@@ -141,9 +141,11 @@ status to `in_progress`.
 | Shogun | Opus | shogun:0.0 | Project oversight |
 | Karo | Sonnet Thinking | multiagent:0.0 | Task management |
 | Ashigaru 1-7 | Configurable (see settings.yaml) | multiagent:0.1-0.7 | Implementation |
-| Gunshi | Opus | multiagent:0.8 | Strategic thinking |
+| Gunshi (壱) | Opus | multiagent:0.8 | Strategic thinking (Claude) |
+| Gunshi2 (弐) | GPT-5.4 | multiagent:0.6 | Strategic thinking (Codex) |
 
-**Default: Assign implementation to ashigaru.** Route strategy/analysis to Gunshi (Opus).
+**Default: Assign implementation to ashigaru.** Route strategy/analysis to Gunshi.
+For critical decisions (L5+), consult both gunshi in parallel (see Dual-Gunshi Protocol in karo.md).
 
 ### Bloom Level → Agent Mapping
 
@@ -181,7 +183,7 @@ These are mechanical checks (L1-L2) — Karo can judge pass/fail in seconds.
 
 ### Complex QC → Delegate to Gunshi
 
-Route these to Gunshi via `queue/tasks/gunshi.yaml`:
+Route these to Gunshi via `queue/tasks/gunshi.yaml` (or `gunshi2.yaml`):
 
 | Check | Bloom Level | Why Gunshi |
 |-------|-------------|------------|

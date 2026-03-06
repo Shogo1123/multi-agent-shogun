@@ -48,7 +48,7 @@ log() {
 usage() {
     echo "Usage: $0 <agent_id> [--type <cli_type>] [--model <model_name>]"
     echo ""
-    echo "  agent_id   karo, ashigaru1-7, gunshi"
+    echo "  agent_id   karo, ashigaru1-5,7, gunshi, gunshi2"
     echo "  --type     claude | codex | copilot | kimi"
     echo "  --model    claude-sonnet-4-6 | claude-opus-4-6 | gpt-5.3-codex | etc."
     echo ""
@@ -88,7 +88,7 @@ resolve_pane() {
         ashigaru3)  echo "multiagent:agents.$((pane_base + 3))" ;;
         ashigaru4)  echo "multiagent:agents.$((pane_base + 4))" ;;
         ashigaru5)  echo "multiagent:agents.$((pane_base + 5))" ;;
-        ashigaru6)  echo "multiagent:agents.$((pane_base + 6))" ;;
+        gunshi2)    echo "multiagent:agents.$((pane_base + 6))" ;;
         ashigaru7)  echo "multiagent:agents.$((pane_base + 7))" ;;
         gunshi)     echo "multiagent:agents.$((pane_base + 8))" ;;
         *)

@@ -120,8 +120,8 @@ workflow:
     note: "Gunshi reports QC results. Ashigaru no longer reports directly to Karo."
   - step: 10
     action: scan_all_reports
-    target: "queue/reports/ashigaru*_report.yaml + queue/reports/gunshi_report.yaml"
-    note: "Scan ALL reports (ashigaru + gunshi). Communication loss safety net."
+    target: "queue/reports/ashigaru*_report.yaml + queue/reports/gunshi_report.yaml + queue/reports/gunshi2_report.yaml"
+    note: "Scan ALL reports (ashigaru + gunshi + gunshi2). Communication loss safety net."
   - step: 11
     action: update_dashboard
     target: dashboard.md
@@ -153,8 +153,10 @@ files:
   input: queue/shogun_to_karo.yaml
   task_template: "queue/tasks/ashigaru{N}.yaml"
   gunshi_task: queue/tasks/gunshi.yaml
+  gunshi2_task: queue/tasks/gunshi2.yaml
   report_pattern: "queue/reports/ashigaru{N}_report.yaml"
   gunshi_report: queue/reports/gunshi_report.yaml
+  gunshi2_report: queue/reports/gunshi2_report.yaml
   dashboard: dashboard.md
 
 panes:
@@ -165,9 +167,9 @@ panes:
     - { id: 3, pane: "multiagent:0.3" }
     - { id: 4, pane: "multiagent:0.4" }
     - { id: 5, pane: "multiagent:0.5" }
-    - { id: 6, pane: "multiagent:0.6" }
     - { id: 7, pane: "multiagent:0.7" }
   gunshi: { pane: "multiagent:0.8" }
+  gunshi2: { pane: "multiagent:0.6" }
   agent_id_lookup: "tmux list-panes -t multiagent -F '#{pane_index}' -f '#{==:#{@agent_id},ashigaru{N}}'"
 
 inbox:
@@ -664,7 +666,7 @@ Shogun needs conversation history with the lord.
 Karo MAY self-/clear when ALL of the following conditions are met:
 
 1. **No in_progress cmds**: All cmds in `shogun_to_karo.yaml` are `done` or `pending` (zero `in_progress`)
-2. **No active tasks**: No `queue/tasks/ashigaru*.yaml` or `queue/tasks/gunshi.yaml` with `status: assigned` or `status: in_progress`
+2. **No active tasks**: No `queue/tasks/ashigaru*.yaml`, `queue/tasks/gunshi.yaml`, or `queue/tasks/gunshi2.yaml` with `status: assigned` or `status: in_progress`
 3. **No unread inbox**: `queue/inbox/karo.yaml` has zero `read: false` entries
 
 When conditions met → execute self-/clear:
@@ -766,11 +768,13 @@ Gunshi (軍師) runs on Opus Thinking and handles strategic work that needs deep
 | **Design evaluation (L5)** | **Gunshi** | Compare approaches, review architecture |
 | **Complex decomposition** | **Gunshi** | When Karo itself struggles to decompose a cmd |
 
-### Gunshi Dispatch Procedure
+### Gunshi Dispatch Procedure (Single-Gunshi)
+
+For simple tasks (L4以下, 簡易QC, dashboard集約) where only one gunshi is needed:
 
 ```
 STEP 1: Identify need for strategic thinking (L4+, no template, multiple approaches)
-STEP 2: Write task YAML to queue/tasks/gunshi.yaml
+STEP 2: Write task YAML to queue/tasks/gunshi.yaml (or gunshi2.yaml)
   - type: strategy | analysis | design | evaluation | decomposition
   - Include all context_files the Gunshi will need
 STEP 3: Set pane task label
@@ -781,17 +785,20 @@ STEP 5: Continue dispatching other ashigaru tasks in parallel
   → Gunshi works independently. Process its report when it arrives.
 ```
 
+For dual-gunshi tasks (L5+, 戦略設計, 根本原因分析) → see "Dual-Gunshi Protocol" section below.
+
 ### Gunshi Report Processing
 
 When Gunshi completes:
-1. Read `queue/reports/gunshi_report.yaml`
+1. Read `queue/reports/gunshi_report.yaml` (and/or `gunshi2_report.yaml` if dual-gunshi)
 2. Use Gunshi's analysis to create/refine ashigaru task YAMLs
 3. Update dashboard.md with Gunshi's findings (if significant)
 4. Reset pane label: `tmux set-option -p -t multiagent:0.8 @current_task ""`
+   (gunshi2: `tmux set-option -p -t multiagent:0.6 @current_task ""`)
 
 ### Gunshi Limitations
 
-- **1 task at a time** (same as ashigaru). Check if Gunshi is busy before assigning.
+- **1 task at a time per gunshi** (same as ashigaru). Check if Gunshi is busy before assigning.
 - **No direct implementation**. If Gunshi says "do X", assign an ashigaru to actually do X.
 - **No dashboard access**. Gunshi's insights reach the Lord only through Karo's dashboard updates.
 
@@ -814,7 +821,7 @@ These are mechanical checks (L1-L2) — Karo can judge pass/fail in seconds.
 
 #### Complex QC → Delegate to Gunshi
 
-Route these to Gunshi via `queue/tasks/gunshi.yaml`:
+Route these to Gunshi via `queue/tasks/gunshi.yaml` (or `gunshi2.yaml`):
 
 | Check | Bloom Level | Why Gunshi |
 |-------|-------------|------------|
@@ -834,9 +841,10 @@ Ashigaru handle implementation only: article creation, code changes, file operat
 | Agent | Default Model | Pane | Role |
 |-------|---------------|------|------|
 | Shogun | Opus | shogun:0.0 | Project oversight |
-| Karo | Sonnet | multiagent:0.0 | Fast task management |
-| Ashigaru 1-7 | (settings.yaml参照) | multiagent:0.1-0.7 | Implementation |
-| Gunshi | Opus | multiagent:0.8 | Strategic thinking |
+| Karo | Opus | multiagent:0.0 | Fast task management |
+| Ashigaru 1-5,7 | (settings.yaml参照) | multiagent:0.1-0.5,0.7 | Implementation |
+| Gunshi (壱) | Claude Opus 4.6 | multiagent:0.8 | Strategic thinking |
+| Gunshi2 (弐) | Codex GPT-5.4-pro | multiagent:0.6 | Strategic thinking (second opinion) |
 
 **Default: Assign implementation to ashigaru.** Route strategy/analysis to Gunshi (Opus).
 足軽のモデルは settings.yaml で個別定義。bloom_routing: "auto" 時は Step 6.5 で動的切替を実行せよ。
@@ -927,3 +935,68 @@ External PRs are reinforcements. Treat with respect.
 - Ashigaru report overdue → check pane status
 - Dashboard inconsistency → reconcile with YAML ground truth
 - Own context < 20% remaining → report to shogun via dashboard, prepare for /clear
+
+## Dual-Gunshi Protocol (二軍師運用)
+
+Two gunshi operate independently: **gunshi** (Claude Opus 4.6, pane 8) and **gunshi2** (Codex GPT-5.4-pro, pane 6).
+Different AI models analyze the same problem for multi-perspective insights.
+
+### Routing Rules
+
+| Task Type | Route To | Reason |
+|---|---|---|
+| Strategy design (L5-L6) | **Both** | Multi-perspective analysis |
+| Root cause analysis (L4+) | **Both** | Different debugging approaches |
+| Literature research | **Both** | Better coverage |
+| Simple QC | gunshi only | Token savings |
+| Dashboard aggregation | gunshi only | Mechanical work |
+| Single-pass analysis (L4) | gunshi only | Sufficient for simple analysis |
+
+### Parallel Consultation Procedure
+
+```
+STEP 1: Write identical task YAML to both
+  → queue/tasks/gunshi.yaml (task_id suffix: _g1)
+  → queue/tasks/gunshi2.yaml (task_id suffix: _g2)
+  Add field: dual_gunshi: true
+
+STEP 2: Send inbox to both
+  bash scripts/inbox_write.sh gunshi "..." task_assigned karo
+  bash scripts/inbox_write.sh gunshi2 "..." task_assigned karo
+
+STEP 3: Wait for both reports (event-driven, no polling)
+
+STEP 4: Both done → Integrate judgment
+  - Agreement → HIGH CONFIDENCE → create ashigaru tasks
+  - Disagreement → dashboard 🚨要対応 with both opinions
+
+STEP 5: Timeout (10 min) → proceed with whichever report is available
+```
+
+### Integration Rules
+
+| Gunshi Reports | Action |
+|---|---|
+| Both agree | High confidence. Proceed with shared recommendation. |
+| Partial agreement | Merge insights. Note divergence in dashboard. |
+| Disagree | Escalate to dashboard 🚨要対応 with both analyses. Lord decides. |
+| One timeout | Proceed with available report. Note missing input in dashboard. |
+| Both timeout | Escalate to dashboard 🚨. Consider task too complex or agents stuck. |
+
+### Report Scanning (updated)
+
+On every wakeup, scan ALL reports: `queue/reports/ashigaru*_report.yaml`, `queue/reports/gunshi_report.yaml`, `queue/reports/gunshi2_report.yaml`.
+
+### Gunshi2 Dispatch Procedure
+
+Same as Gunshi dispatch but target is gunshi2:
+```bash
+# Write task YAML
+# → queue/tasks/gunshi2.yaml
+
+# Set pane task label
+tmux set-option -p -t multiagent:0.6 @current_task "戦略立案"
+
+# Send inbox
+bash scripts/inbox_write.sh gunshi2 "タスクYAMLを読んで分析開始せよ。" task_assigned karo
+```

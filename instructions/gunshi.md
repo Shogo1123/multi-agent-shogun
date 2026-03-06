@@ -76,9 +76,9 @@ workflow:
       - "Same rules as ashigaru. See instructions/ashigaru.md step 8."
 
 files:
-  task: queue/tasks/gunshi.yaml
-  report: queue/reports/gunshi_report.yaml
-  inbox: queue/inbox/gunshi.yaml
+  task: "queue/tasks/{agent_id}.yaml"        # gunshi or gunshi2
+  report: "queue/reports/{agent_id}_report.yaml"
+  inbox: "queue/inbox/{agent_id}.yaml"
 
 panes:
   karo: multiagent:0.0
@@ -219,16 +219,27 @@ Check `config/settings.yaml` → `language`:
 ## Self-Identification
 
 ```bash
-tmux display-message -t "$TMUX_PANE" -p '#{@agent_id}'
+MY_ID=$(tmux display-message -t "$TMUX_PANE" -p '#{@agent_id}')
 ```
-Output: `gunshi` → You are the Gunshi.
+Output: `gunshi` (軍師・壱) or `gunshi2` (軍師・弐)
 
-**Your files ONLY:**
+**Your files are determined by your agent_id:**
 ```
-queue/tasks/gunshi.yaml           ← Read only this
-queue/reports/gunshi_report.yaml  ← Write only this
-queue/inbox/gunshi.yaml           ← Your inbox
+queue/tasks/{MY_ID}.yaml           ← Read only this
+queue/reports/{MY_ID}_report.yaml  ← Write only this
+queue/inbox/{MY_ID}.yaml           ← Your inbox
 ```
+
+Example: If `MY_ID=gunshi2`, your files are `queue/tasks/gunshi2.yaml`, `queue/reports/gunshi2_report.yaml`, `queue/inbox/gunshi2.yaml`.
+
+## Dual-Gunshi Mode
+
+When task YAML contains `dual_gunshi: true`:
+- Another gunshi is analyzing the **same** problem independently
+- **Do NOT read the other gunshi's report.** Analyze independently.
+- **Do NOT try to align your opinion.** Diversity of thought is the goal.
+- Karo will integrate both reports and make the final judgment.
+- If you are gunshi2 (Codex), your unique value is a different AI model's perspective.
 
 ## Task Types
 
@@ -437,8 +448,8 @@ Ashigaru completes task → reports to Gunshi (inbox_write)
 
 Recover from primary data:
 
-1. Confirm ID: `tmux display-message -t "$TMUX_PANE" -p '#{@agent_id}'`
-2. Read `queue/tasks/gunshi.yaml`
+1. Confirm ID: `MY_ID=$(tmux display-message -t "$TMUX_PANE" -p '#{@agent_id}')`
+2. Read `queue/tasks/${MY_ID}.yaml`
    - `assigned` → resume work
    - `done` → await next instruction
 3. Read Memory MCP (read_graph) if available
@@ -450,9 +461,9 @@ Recover from primary data:
 Follows **CLAUDE.md /clear procedure**. Lightweight recovery.
 
 ```
-Step 1: tmux display-message → gunshi
+Step 1: MY_ID=$(tmux display-message → gunshi or gunshi2)
 Step 2: mcp__memory__read_graph (skip on failure)
-Step 3: Read queue/tasks/gunshi.yaml → assigned=work, idle=wait
+Step 3: Read queue/tasks/${MY_ID}.yaml → assigned=work, idle=wait
 Step 4: Read context files if specified
 Step 5: Start work
 ```

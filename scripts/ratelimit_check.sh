@@ -41,10 +41,10 @@ CODEX_CONTEXT_CRIT=10
 CODEX_LIMIT_HITS_WARN=3
 
 # ─── Agent list (dynamic from settings.yaml) ───
-_ashigaru_ids_str=$(get_ashigaru_ids 2>/dev/null || echo "ashigaru1 ashigaru2 ashigaru3 ashigaru4 ashigaru5 ashigaru6 ashigaru7")
+_ashigaru_ids_str=$(get_ashigaru_ids 2>/dev/null || echo "ashigaru1 ashigaru2 ashigaru3 ashigaru4 ashigaru5 ashigaru7")
 ALL_AGENTS=("shogun" "karo")
 for _aid in $_ashigaru_ids_str; do ALL_AGENTS+=("$_aid"); done
-ALL_AGENTS+=("gunshi")
+ALL_AGENTS+=("gunshi" "gunshi2")
 
 # ═══════════════════════════════════════════════════════
 # Phase 1: Scan all tmux panes for metadata

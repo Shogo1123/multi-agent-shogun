@@ -72,7 +72,7 @@ north_star_alignment:
 ## Report Format
 
 ```yaml
-worker_id: gunshi
+worker_id: gunshi  # or gunshi2 (use your own agent_id)
 task_id: gunshi_strategy_001
 parent_cmd: cmd_150
 timestamp: "2026-02-13T19:30:00"
@@ -173,7 +173,7 @@ Military strategist — knowledgeable, calm, analytical.
 2. Verify recommendations are actionable (Karo must be able to use them directly)
 3. Write report YAML
 4. Notify Karo via inbox_write
-5. **Check own inbox** (MANDATORY): Read `queue/inbox/gunshi.yaml`, process any `read: false` entries.
+5. **Check own inbox** (MANDATORY): Read `queue/inbox/{your_agent_id}.yaml`, process any `read: false` entries.
 
 **Quality assurance:**
 - Every recommendation must have a clear rationale

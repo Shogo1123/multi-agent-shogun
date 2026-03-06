@@ -4,12 +4,12 @@ version: "3.0"
 updated: "2026-02-07"
 description: "Claude Code + tmux multi-agent parallel dev platform with sengoku military hierarchy"
 
-hierarchy: "Lord (human) → Shogun → Karo → Ashigaru 1-7 / Gunshi"
+hierarchy: "Lord (human) → Shogun → Karo → Ashigaru 1-5,7 / Gunshi (壱) / Gunshi2 (弐)"
 communication: "YAML files + inbox mailbox system (event-driven, NO polling)"
 
 tmux_sessions:
   shogun: { pane_0: shogun }
-  multiagent: { pane_0: karo, pane_1-7: ashigaru1-7, pane_8: gunshi }
+  multiagent: { pane_0: karo, pane_1-5: ashigaru1-5, pane_6: gunshi2, pane_7: ashigaru7, pane_8: gunshi }
 
 files:
   config: config/projects.yaml          # Project list (summary)
@@ -17,10 +17,12 @@ files:
   context: "context/{project}.md"       # Project-specific notes for ashigaru/gunshi
   cmd_queue: queue/shogun_to_karo.yaml  # Shogun → Karo commands
   tasks: "queue/tasks/ashigaru{N}.yaml" # Karo → Ashigaru assignments (per-ashigaru)
-  gunshi_task: queue/tasks/gunshi.yaml  # Karo → Gunshi strategic assignments
+  gunshi_task: queue/tasks/gunshi.yaml  # Karo → Gunshi (壱) strategic assignments
+  gunshi2_task: queue/tasks/gunshi2.yaml # Karo → Gunshi2 (弐) strategic assignments
   pending_tasks: queue/tasks/pending.yaml # Karo管理の保留タスク（blocked未割当）
   reports: "queue/reports/ashigaru{N}_report.yaml" # Ashigaru → Karo reports
-  gunshi_report: queue/reports/gunshi_report.yaml  # Gunshi → Karo strategic reports
+  gunshi_report: queue/reports/gunshi_report.yaml  # Gunshi (壱) → Karo strategic reports
+  gunshi2_report: queue/reports/gunshi2_report.yaml # Gunshi2 (弐) → Karo strategic reports
   dashboard: dashboard.md              # Human-readable summary (secondary data)
   ntfy_inbox: queue/ntfy_inbox.yaml    # Incoming ntfy messages from Lord's phone
 
@@ -64,7 +66,7 @@ language:
 1. Identify self: `tmux display-message -t "$TMUX_PANE" -p '#{@agent_id}'`
 2. `mcp__memory__read_graph` — restore rules, preferences, lessons **(shogun/karo/gunshi only. ashigaru skip this step — task YAML is sufficient)**
 3. **Read `memory/MEMORY.md`** (shogun only) — persistent cross-session memory. If file missing, skip. *Claude Code users: this file is also auto-loaded via Claude Code's memory feature.*
-4. **Read your instructions file**: shogun→`instructions/shogun.md`, karo→`instructions/karo.md`, ashigaru→`instructions/ashigaru.md`, gunshi→`instructions/gunshi.md`. **NEVER SKIP** — even if a conversation summary exists. Summaries do NOT preserve persona, speech style, or forbidden actions.
+4. **Read your instructions file**: shogun→`instructions/shogun.md`, karo→`instructions/karo.md`, ashigaru→`instructions/ashigaru.md`, gunshi→`instructions/gunshi.md`, gunshi2→Codex auto-loads `instructions/codex-gunshi.md` via AGENTS.md. **NEVER SKIP** — even if a conversation summary exists. Summaries do NOT preserve persona, speech style, or forbidden actions.
 4. Rebuild state from primary YAML data (queue/, tasks/, reports/)
 5. Review forbidden actions, then start work
 
@@ -72,7 +74,7 @@ language:
 
 **CRITICAL**: dashboard.md is secondary data (karo's summary). Primary data = YAML files. Always verify from YAML.
 
-## /clear Recovery (ashigaru/gunshi only)
+## /clear Recovery (ashigaru/gunshi/gunshi2 only)
 
 Lightweight recovery using only CLAUDE.md (auto-loaded). Do NOT read instructions/*.md (cost saving).
 

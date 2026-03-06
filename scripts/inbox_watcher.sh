@@ -615,7 +615,7 @@ send_context_reset() {
     # Only ashigaru should receive automatic context resets (clear stale task context).
     # Shogun (human-controlled), Karo (coordinator state), Gunshi (strategic state)
     # all maintain complex running context that should not be wiped automatically.
-    if [ "$AGENT_ID" = "shogun" ] || [ "$AGENT_ID" = "karo" ] || [ "$AGENT_ID" = "gunshi" ]; then
+    if [ "$AGENT_ID" = "shogun" ] || [ "$AGENT_ID" = "karo" ] || [ "$AGENT_ID" = "gunshi" ] || [ "$AGENT_ID" = "gunshi2" ]; then
         echo "[$(date)] [SKIP] $AGENT_ID: suppressing context reset (command-layer agent)" >&2
         return 0
     fi
@@ -1106,8 +1106,8 @@ for s in data.get('specials', []):
                     echo "[$(date)] ESCALATION Phase 3: $AGENT_ID unresponsive for ${age}s, but cli=codex — skipping /clear." >&2
                     FIRST_UNREAD_SEEN=$now  # Reset timer (no destructive action)
                     send_wakeup "$normal_count"
-                elif [ "$AGENT_ID" = "shogun" ] || [ "$AGENT_ID" = "karo" ] || [ "$AGENT_ID" = "gunshi" ]; then
-                    # Command-layer agents (karo/gunshi/shogun): suppress /clear even in Phase 3
+                elif [ "$AGENT_ID" = "shogun" ] || [ "$AGENT_ID" = "karo" ] || [ "$AGENT_ID" = "gunshi" ] || [ "$AGENT_ID" = "gunshi2" ]; then
+                    # Command-layer agents (karo/gunshi/gunshi2/shogun): suppress /clear even in Phase 3
                     echo "[$(date)] [SKIP] ESCALATION Phase 3: $AGENT_ID suppressed (command-layer agent, ${age}s). Using Escape+nudge." >&2
                     FIRST_UNREAD_SEEN=$now  # Reset timer
                     send_wakeup_with_escape "$normal_count"

@@ -183,7 +183,7 @@ get_instruction_file() {
     case "$agent_id" in
         shogun)    role="shogun" ;;
         karo)      role="karo" ;;
-        gunshi)    role="gunshi" ;;
+        gunshi|gunshi2) role="gunshi" ;;
         ashigaru*) role="ashigaru" ;;
         *)
             echo "" >&2
@@ -279,7 +279,7 @@ get_agent_model() {
             case "$agent_id" in
                 shogun)         echo "opus" ;;
                 karo)           echo "sonnet" ;;
-                gunshi)         echo "opus" ;;
+                gunshi|gunshi2) echo "opus" ;;
                 ashigaru*)      echo "sonnet" ;;
                 *)              echo "sonnet" ;;
             esac
@@ -1157,7 +1157,7 @@ except Exception:
 
 # get_ashigaru_ids()
 # settings.yaml の cli.agents から足軽ID一覧を返す（スペース区切り、番号順）
-# フォールバック: "ashigaru1 ashigaru2 ashigaru3 ashigaru4 ashigaru5 ashigaru6 ashigaru7"
+# フォールバック: "ashigaru1 ashigaru2 ashigaru3 ashigaru4 ashigaru5 ashigaru7"
 get_ashigaru_ids() {
     local settings="${CLI_ADAPTER_SETTINGS:-${CLI_ADAPTER_PROJECT_ROOT}/config/settings.yaml}"
     local result
@@ -1176,6 +1176,6 @@ except Exception:
     if [[ -n "$result" ]]; then
         echo "$result"
     else
-        echo "ashigaru1 ashigaru2 ashigaru3 ashigaru4 ashigaru5 ashigaru6 ashigaru7"
+        echo "ashigaru1 ashigaru2 ashigaru3 ashigaru4 ashigaru5 ashigaru7"
     fi
 }

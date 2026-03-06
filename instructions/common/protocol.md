@@ -64,7 +64,7 @@ Read-cost controls:
 | 2〜4 min | Escape×2 + nudge | Cursor position bug workaround |
 | 4 min+ | Context reset sent (max once per 5 min, skipped for Codex) | Force session reset + YAML re-read |
 
-## Inbox Processing Protocol (karo/ashigaru/gunshi)
+## Inbox Processing Protocol (karo/ashigaru/gunshi/gunshi2)
 
 When you receive `inboxN` (e.g. `inbox3`):
 1. `Read queue/inbox/{your_id}.yaml`
