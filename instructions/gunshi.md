@@ -360,7 +360,7 @@ result:
   recommendations:
     - "ohaka: ashigaru1,2,3 → 5記事/日ペース"
     - "kekkon: ashigaru4,5 → 4記事/日ペース"
-    - "zeirishi: ashigaru6,7 → 3記事/日ペース"
+    - "zeirishi: ashigaru5,7 → 3記事/日ペース"
   risks:
     - "ashigaru3のコンテキスト消費が早い（長文記事担当）"
     - "全サイト同時ビルドはメモリ不足の可能性"

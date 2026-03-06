@@ -72,17 +72,17 @@ bash scripts/switch_cli.sh ashigaru5 --type codex --model gpt-5.3-codex-spark
 
 ```bash
 # 全足軽をSonnetに
-for i in $(seq 1 7); do
-    bash scripts/switch_cli.sh ashigaru$i --type claude --model claude-sonnet-4-6
+for agent in ashigaru1 ashigaru2 ashigaru3 ashigaru4 ashigaru5 ashigaru7; do
+    bash scripts/switch_cli.sh "$agent" --type claude --model claude-sonnet-4-6
 done
 
 # 全足軽をSparkに
-for i in $(seq 1 7); do
-    bash scripts/switch_cli.sh ashigaru$i --type codex --model gpt-5.3-codex-spark
+for agent in ashigaru1 ashigaru2 ashigaru3 ashigaru4 ashigaru5 ashigaru7; do
+    bash scripts/switch_cli.sh "$agent" --type codex --model gpt-5.3-codex-spark
 done
 
 # 全エージェント（家老・軍師含む）を再起動
-for agent in karo ashigaru1 ashigaru2 ashigaru3 ashigaru4 ashigaru5 ashigaru6 ashigaru7 gunshi; do
+for agent in karo ashigaru1 ashigaru2 ashigaru3 ashigaru4 ashigaru5 gunshi2 ashigaru7 gunshi; do
     bash scripts/switch_cli.sh "$agent"
 done
 ```
