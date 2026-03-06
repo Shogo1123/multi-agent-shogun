@@ -1103,6 +1103,7 @@ for s in data.get('specials', []):
                 effective_cli=$(get_effective_cli_type)
                 if [[ "$effective_cli" == "codex" ]]; then
                     # Codex /clear -> /new は会話を切ってしまうため、安全側に倒す。
+                    # Note: gunshi2 (codex) はここで先にマッチする。command-layer判定と同じ効果（安全側）。
                     echo "[$(date)] ESCALATION Phase 3: $AGENT_ID unresponsive for ${age}s, but cli=codex — skipping /clear." >&2
                     FIRST_UNREAD_SEEN=$now  # Reset timer (no destructive action)
                     send_wakeup "$normal_count"

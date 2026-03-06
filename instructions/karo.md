@@ -774,14 +774,16 @@ For simple tasks (L4以下, 簡易QC, dashboard集約) where only one gunshi is 
 
 ```
 STEP 1: Identify need for strategic thinking (L4+, no template, multiple approaches)
-STEP 2: Write task YAML to queue/tasks/gunshi.yaml (or gunshi2.yaml)
+STEP 2: Choose target gunshi (gunshi=Claude Opus, gunshi2=Codex GPT-5.4)
+STEP 3: Write task YAML to queue/tasks/{target}.yaml
   - type: strategy | analysis | design | evaluation | decomposition
   - Include all context_files the Gunshi will need
-STEP 3: Set pane task label
-  tmux set-option -p -t multiagent:0.8 @current_task "戦略立案"
-STEP 4: Send inbox
-  bash scripts/inbox_write.sh gunshi "タスクYAMLを読んで分析開始せよ。" task_assigned karo
-STEP 5: Continue dispatching other ashigaru tasks in parallel
+STEP 4: Set pane task label
+  # gunshi → multiagent:0.8, gunshi2 → multiagent:0.6
+  tmux set-option -p -t multiagent:0.{pane} @current_task "戦略立案"
+STEP 5: Send inbox
+  bash scripts/inbox_write.sh {target} "タスクYAMLを読んで分析開始せよ。" task_assigned karo
+STEP 6: Continue dispatching other ashigaru tasks in parallel
   → Gunshi works independently. Process its report when it arrives.
 ```
 
@@ -844,7 +846,7 @@ Ashigaru handle implementation only: article creation, code changes, file operat
 | Karo | Opus | multiagent:0.0 | Fast task management |
 | Ashigaru 1-5,7 | (settings.yaml参照) | multiagent:0.1-0.5,0.7 | Implementation |
 | Gunshi (壱) | Claude Opus 4.6 | multiagent:0.8 | Strategic thinking |
-| Gunshi2 (弐) | Codex GPT-5.4-pro | multiagent:0.6 | Strategic thinking (second opinion) |
+| Gunshi2 (弐) | Codex GPT-5.4 | multiagent:0.6 | Strategic thinking (second opinion) |
 
 **Default: Assign implementation to ashigaru.** Route strategy/analysis to Gunshi (Opus).
 足軽のモデルは settings.yaml で個別定義。bloom_routing: "auto" 時は Step 6.5 で動的切替を実行せよ。
@@ -938,7 +940,7 @@ External PRs are reinforcements. Treat with respect.
 
 ## Dual-Gunshi Protocol (二軍師運用)
 
-Two gunshi operate independently: **gunshi** (Claude Opus 4.6, pane 8) and **gunshi2** (Codex GPT-5.4-pro, pane 6).
+Two gunshi operate independently: **gunshi** (Claude Opus 4.6, pane 8) and **gunshi2** (Codex GPT-5.4, pane 6).
 Different AI models analyze the same problem for multi-perspective insights.
 
 ### Routing Rules

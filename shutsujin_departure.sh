@@ -402,6 +402,10 @@ result: null
 EOF
     done
 
+    # legacy ashigaru6 ファイル削除（pane 6 は gunshi2 に転用済み）
+    rm -f ./queue/tasks/ashigaru6.yaml ./queue/reports/ashigaru6_report.yaml ./queue/metrics/ashigaru6_selfwatch.yaml 2>/dev/null
+    log_info "  └─ legacy ashigaru6 ファイル削除"
+
     # ntfy inbox リセット
     echo "inbox:" > ./queue/ntfy_inbox.yaml
 

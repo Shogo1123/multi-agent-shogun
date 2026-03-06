@@ -279,7 +279,8 @@ get_agent_model() {
             case "$agent_id" in
                 shogun)         echo "opus" ;;
                 karo)           echo "sonnet" ;;
-                gunshi|gunshi2) echo "opus" ;;
+                gunshi)         echo "opus" ;;
+                gunshi2)        echo "gpt-5.4" ;;
                 ashigaru*)      echo "sonnet" ;;
                 *)              echo "sonnet" ;;
             esac
