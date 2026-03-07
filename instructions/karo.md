@@ -163,12 +163,12 @@ panes:
   self: multiagent:0.0
   ashigaru_default:
     - { id: 1, pane: "multiagent:0.1" }
-    - { id: 2, pane: "multiagent:0.2" }
-    - { id: 3, pane: "multiagent:0.3" }
-    - { id: 4, pane: "multiagent:0.4" }
+    - { id: 2, pane: "multiagent:0.4" }
+    - { id: 3, pane: "multiagent:0.7" }
+    - { id: 4, pane: "multiagent:0.2" }
     - { id: 5, pane: "multiagent:0.5" }
-    - { id: 7, pane: "multiagent:0.7" }
-  gunshi: { pane: "multiagent:0.8" }
+    - { id: 7, pane: "multiagent:0.8" }
+  gunshi: { pane: "multiagent:0.3" }
   gunshi2: { pane: "multiagent:0.6" }
   agent_id_lookup: "tmux list-panes -t multiagent -F '#{pane_index}' -f '#{==:#{@agent_id},ashigaru{N}}'"
 
@@ -779,7 +779,7 @@ STEP 3: Write task YAML to queue/tasks/{target}.yaml
   - type: strategy | analysis | design | evaluation | decomposition
   - Include all context_files the Gunshi will need
 STEP 4: Set pane task label
-  # gunshi → multiagent:0.8, gunshi2 → multiagent:0.6
+  # gunshi → multiagent:0.3, gunshi2 → multiagent:0.6
   tmux set-option -p -t multiagent:0.{pane} @current_task "戦略立案"
 STEP 5: Send inbox
   bash scripts/inbox_write.sh {target} "タスクYAMLを読んで分析開始せよ。" task_assigned karo
@@ -795,7 +795,7 @@ When Gunshi completes:
 1. Read `queue/reports/gunshi_report.yaml` (and/or `gunshi2_report.yaml` if dual-gunshi)
 2. Use Gunshi's analysis to create/refine ashigaru task YAMLs
 3. Update dashboard.md with Gunshi's findings (if significant)
-4. Reset pane label: `tmux set-option -p -t multiagent:0.8 @current_task ""`
+4. Reset pane label: `tmux set-option -p -t multiagent:0.3 @current_task ""`
    (gunshi2: `tmux set-option -p -t multiagent:0.6 @current_task ""`)
 
 ### Gunshi Limitations
@@ -844,8 +844,8 @@ Ashigaru handle implementation only: article creation, code changes, file operat
 |-------|---------------|------|------|
 | Shogun | Opus | shogun:0.0 | Project oversight |
 | Karo | Opus | multiagent:0.0 | Fast task management |
-| Ashigaru 1-5,7 | (settings.yaml参照) | multiagent:0.1-0.5,0.7 | Implementation |
-| Gunshi (壱) | Claude Opus 4.6 | multiagent:0.8 | Strategic thinking |
+| Ashigaru 1-5,7 | (settings.yaml参照) | multiagent:0.1,0.2,0.4,0.5,0.7,0.8 | Implementation |
+| Gunshi (壱) | Claude Opus 4.6 | multiagent:0.3 | Strategic thinking |
 | Gunshi2 (弐) | Codex GPT-5.4 | multiagent:0.6 | Strategic thinking (second opinion) |
 
 **Default: Assign implementation to ashigaru.** Route strategy/analysis to Gunshi (Opus).
@@ -940,7 +940,7 @@ External PRs are reinforcements. Treat with respect.
 
 ## Dual-Gunshi Protocol (二軍師運用)
 
-Two gunshi operate independently: **gunshi** (Claude Opus 4.6, pane 8) and **gunshi2** (Codex GPT-5.4, pane 6).
+Two gunshi operate independently: **gunshi** (Claude Opus 4.6, pane 3) and **gunshi2** (Codex GPT-5.4, pane 6).
 Different AI models analyze the same problem for multi-perspective insights.
 
 ### Routing Rules

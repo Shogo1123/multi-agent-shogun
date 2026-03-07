@@ -155,7 +155,7 @@ if [[ -x "$PYTHON" ]]; then
 fi
 
 # Agent definitions (from shutsujin_departure.sh)
-AGENTS=("karo" "ashigaru1" "ashigaru2" "ashigaru3" "ashigaru4" "ashigaru5" "gunshi2" "ashigaru7" "gunshi")
+AGENTS=("karo" "ashigaru1" "ashigaru4" "gunshi" "ashigaru2" "ashigaru5" "gunshi2" "ashigaru3" "ashigaru7")
 
 # pane-base-index
 PANE_BASE=$(tmux show-options -gv pane-base-index 2>/dev/null || echo 0)

@@ -84,13 +84,13 @@ resolve_pane() {
     case "$agent_id" in
         karo)       echo "multiagent:agents.$((pane_base + 0))" ;;
         ashigaru1)  echo "multiagent:agents.$((pane_base + 1))" ;;
-        ashigaru2)  echo "multiagent:agents.$((pane_base + 2))" ;;
-        ashigaru3)  echo "multiagent:agents.$((pane_base + 3))" ;;
-        ashigaru4)  echo "multiagent:agents.$((pane_base + 4))" ;;
+        ashigaru4)  echo "multiagent:agents.$((pane_base + 2))" ;;
+        gunshi)     echo "multiagent:agents.$((pane_base + 3))" ;;
+        ashigaru2)  echo "multiagent:agents.$((pane_base + 4))" ;;
         ashigaru5)  echo "multiagent:agents.$((pane_base + 5))" ;;
         gunshi2)    echo "multiagent:agents.$((pane_base + 6))" ;;
-        ashigaru7)  echo "multiagent:agents.$((pane_base + 7))" ;;
-        gunshi)     echo "multiagent:agents.$((pane_base + 8))" ;;
+        ashigaru3)  echo "multiagent:agents.$((pane_base + 7))" ;;
+        ashigaru7)  echo "multiagent:agents.$((pane_base + 8))" ;;
         *)
             log "ERROR: Unknown agent_id: $agent_id"
             return 1

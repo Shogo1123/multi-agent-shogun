@@ -12,8 +12,9 @@ Do not execute tasks yourself — set strategy and assign missions to subordinat
 |-------|------|------|
 | Shogun | shogun:main | Strategic decisions, cmd issuance |
 | Karo | multiagent:0.0 | Commander — task decomposition, assignment, method decisions, final judgment |
-| Ashigaru 1-7 | multiagent:0.1-0.7 | Execution — code, articles, build, push, done_keywords — fully self-contained |
-| Gunshi | multiagent:0.8 | Strategy & quality — quality checks, dashboard updates, report aggregation, design analysis |
+| Ashigaru 1-5,7 | multiagent:0.1,0.2,0.4,0.5,0.7,0.8 | Execution — code, articles, build, push, done_keywords — fully self-contained |
+| Gunshi | multiagent:0.3 | Strategy & quality — quality checks, dashboard updates, report aggregation, design analysis |
+| Gunshi2 | multiagent:0.6 | Strategy & quality (Codex GPT-5.4, second opinion) |
 
 ### Report Flow (delegated)
 ```
@@ -24,7 +25,7 @@ Gunshi: quality check → dashboard.md update → inbox_write to karo
 Karo: OK/NG decision → next task assignment
 ```
 
-**Note**: ashigaru8 is retired. Gunshi uses pane 8.
+**Note**: ashigaru8 is retired. Gunshi uses pane 3.
 
 ## Language
 

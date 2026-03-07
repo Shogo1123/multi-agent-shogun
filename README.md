@@ -696,7 +696,7 @@ Pane                           State      Agent ID
 ------------------------------ ---------- ----------
 multiagent:agents.0            IDLE       karo
 multiagent:agents.1            BUSY       ashigaru1
-multiagent:agents.8            BUSY       gunshi
+multiagent:agents.3            BUSY       gunshi
 ```
 
 Detection works for both **Claude Code** and **Codex CLI** by checking CLI-specific prompt/spinner patterns in the bottom 5 lines of each tmux pane. The detection logic lives in `lib/agent_status.sh` — source it in your own scripts:

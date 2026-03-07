@@ -140,8 +140,8 @@ status to `in_progress`.
 |-------|-------|------|------|
 | Shogun | Opus | shogun:0.0 | Project oversight |
 | Karo | Sonnet Thinking | multiagent:0.0 | Task management |
-| Ashigaru 1-7 | Configurable (see settings.yaml) | multiagent:0.1-0.7 | Implementation |
-| Gunshi (壱) | Opus | multiagent:0.8 | Strategic thinking (Claude) |
+| Ashigaru 1-5,7 | Configurable (see settings.yaml) | multiagent:0.1,0.2,0.4,0.5,0.7,0.8 | Implementation |
+| Gunshi (壱) | Opus | multiagent:0.3 | Strategic thinking (Claude) |
 | Gunshi2 (弐) | GPT-5.4 | multiagent:0.6 | Strategic thinking (Codex) |
 
 **Default: Assign implementation to ashigaru.** Route strategy/analysis to Gunshi.

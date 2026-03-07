@@ -9,7 +9,7 @@ communication: "YAML files + inbox mailbox system (event-driven, NO polling)"
 
 tmux_sessions:
   shogun: { pane_0: shogun }
-  multiagent: { pane_0: karo, pane_1-5: ashigaru1-5, pane_6: gunshi2, pane_7: ashigaru7, pane_8: gunshi }
+  multiagent: { pane_0: karo, pane_1: ashigaru1, pane_2: ashigaru4, pane_3: gunshi, pane_4: ashigaru2, pane_5: ashigaru5, pane_6: gunshi2, pane_7: ashigaru3, pane_8: ashigaru7 }
 
 files:
   config: config/projects.yaml          # Project list (summary)

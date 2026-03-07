@@ -701,7 +701,7 @@ Pane                           State      Agent ID
 ------------------------------ ---------- ----------
 multiagent:agents.0            IDLE       karo
 multiagent:agents.1            BUSY       ashigaru1
-multiagent:agents.8            BUSY       gunshi
+multiagent:agents.3            BUSY       gunshi
 ```
 
 判定は **Claude Code** と **Codex CLI** の両方に対応。各tmuxペインの末尾5行からCLI固有のプロンプト/スピナーパターンを検出。判定ロジックは `lib/agent_status.sh` に分離されており、自作スクリプトからも利用可能：

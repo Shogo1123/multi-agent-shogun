@@ -61,13 +61,13 @@ load_resolve_pane() {
         case "$agent_id" in
             karo)       echo "multiagent:agents.$((pane_base + 0))" ;;
             ashigaru1)  echo "multiagent:agents.$((pane_base + 1))" ;;
-            ashigaru2)  echo "multiagent:agents.$((pane_base + 2))" ;;
-            ashigaru3)  echo "multiagent:agents.$((pane_base + 3))" ;;
-            ashigaru4)  echo "multiagent:agents.$((pane_base + 4))" ;;
+            ashigaru4)  echo "multiagent:agents.$((pane_base + 2))" ;;
+            gunshi)     echo "multiagent:agents.$((pane_base + 3))" ;;
+            ashigaru2)  echo "multiagent:agents.$((pane_base + 4))" ;;
             ashigaru5)  echo "multiagent:agents.$((pane_base + 5))" ;;
-            ashigaru6)  echo "multiagent:agents.$((pane_base + 6))" ;;
-            ashigaru7)  echo "multiagent:agents.$((pane_base + 7))" ;;
-            gunshi)     echo "multiagent:agents.$((pane_base + 8))" ;;
+            gunshi2)    echo "multiagent:agents.$((pane_base + 6))" ;;
+            ashigaru3)  echo "multiagent:agents.$((pane_base + 7))" ;;
+            ashigaru7)  echo "multiagent:agents.$((pane_base + 8))" ;;
             *)          return 1 ;;
         esac
     }
@@ -88,18 +88,18 @@ load_resolve_pane() {
     [ "$result" = "multiagent:agents.1" ]
 }
 
-@test "resolve_pane: ashigaru7 → multiagent:agents.7" {
+@test "resolve_pane: ashigaru7 → multiagent:agents.8" {
     load_resolve_pane
     MOCK_PANE_BASE=0
     result=$(resolve_pane "ashigaru7")
-    [ "$result" = "multiagent:agents.7" ]
+    [ "$result" = "multiagent:agents.8" ]
 }
 
-@test "resolve_pane: gunshi → multiagent:agents.8" {
+@test "resolve_pane: gunshi → multiagent:agents.3" {
     load_resolve_pane
     MOCK_PANE_BASE=0
     result=$(resolve_pane "gunshi")
-    [ "$result" = "multiagent:agents.8" ]
+    [ "$result" = "multiagent:agents.3" ]
 }
 
 @test "resolve_pane: unknown agent → return 1" {
@@ -115,9 +115,9 @@ load_resolve_pane() {
     result=$(resolve_pane "karo")
     [ "$result" = "multiagent:agents.2" ]
     result=$(resolve_pane "ashigaru3")
-    [ "$result" = "multiagent:agents.5" ]
+    [ "$result" = "multiagent:agents.9" ]
     result=$(resolve_pane "gunshi")
-    [ "$result" = "multiagent:agents.10" ]
+    [ "$result" = "multiagent:agents.5" ]
 }
 
 # =============================================================================

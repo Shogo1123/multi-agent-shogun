@@ -585,25 +585,14 @@ tmux select-pane -t "multiagent:agents.$((PANE_BASE+6))"
 tmux split-window -v
 tmux split-window -v
 
-# ペインラベル・エージェントID・色設定 — settings.yaml から動的に構築
-# 配列順はペイン番号に対応: karo(0), ashigaru1-5(1-5), gunshi2(6), ashigaru7(7), gunshi(8)
-PANE_LABELS=("karo")
-AGENT_IDS=("karo")
-PANE_COLORS=("red")
-for _ai in $_ASHIGARU_IDS_STR; do
-    # ashigaru7の前にgunshi2を挿入（pane 6 = 旧ashigaru6）
-    if [[ "$_ai" == "ashigaru7" ]]; then
-        PANE_LABELS+=("gunshi2")
-        AGENT_IDS+=("gunshi2")
-        PANE_COLORS+=("yellow")
-    fi
-    PANE_LABELS+=("$_ai")
-    AGENT_IDS+=("$_ai")
-    PANE_COLORS+=("blue")
-done
-PANE_LABELS+=("gunshi")
-AGENT_IDS+=("gunshi")
-PANE_COLORS+=("yellow")
+# ペインラベル・エージェントID・色設定
+# 3×3グリッド配置（tmuxは列優先でペイン番号を割り振る）
+# 上段: karo(0), gunshi(3), gunshi2(6)      — 指揮層
+# 中段: ashigaru1(1), ashigaru2(4), ashigaru3(7) — 実行層
+# 下段: ashigaru4(2), ashigaru5(5), ashigaru7(8) — 実行層
+AGENT_IDS=("karo" "ashigaru1" "ashigaru4" "gunshi" "ashigaru2" "ashigaru5" "gunshi2" "ashigaru3" "ashigaru7")
+PANE_LABELS=("${AGENT_IDS[@]}")
+PANE_COLORS=("red" "blue" "blue" "yellow" "blue" "blue" "yellow" "blue" "blue")
 
 # モデル名設定（pane-border-format で常時表示するため）- 動的構築
 MODEL_NAMES=()
@@ -694,6 +683,11 @@ with open(f,'w') as fh: yaml.safe_dump(d, fh, default_flow_style=False, allow_un
         _shogun_cmd=$(build_cli_command "shogun")
         log_info "  └─ 将軍 settings.yaml thinking=false に設定"
     fi
+    # 将軍にも初期プロンプトを付加（Session Start手順の確実な実行）
+    _startup_prompt=$(get_startup_prompt "shogun" 2>/dev/null)
+    if [[ -n "$_startup_prompt" ]]; then
+        _shogun_cmd="$_shogun_cmd \"$_startup_prompt\""
+    fi
     tmux set-option -p -t "shogun:main" @agent_cli "$_shogun_cli_type"
     tmux send-keys -t shogun:main "$_shogun_cmd"
     tmux send-keys -t shogun:main Enter
@@ -725,7 +719,6 @@ with open(f,'w') as fh: yaml.safe_dump(d, fh, default_flow_style=False, allow_un
     log_info "  └─ 家老（${_karo_display}）、召喚完了"
 
     # 足軽・軍師弐の起動 — AGENT_IDS配列からペイン位置を解決
-    # ペイン配置: karo(0), ashigaru1-5(1-5), gunshi2(6), ashigaru7(7), gunshi(8)
     for _idx in "${!AGENT_IDS[@]}"; do
         _aid="${AGENT_IDS[$_idx]}"
         [[ "$_aid" == ashigaru* ]] || continue
@@ -1015,14 +1008,14 @@ echo "     └──────────────────────
 echo ""
 echo "     【multiagentセッション】家老・足軽・軍師の陣（3x3 = 9ペイン）"
 echo "     ┌─────────┬─────────┬─────────┐"
-echo "     │  karo   │ashigaru3│ gunshi2 │"
-echo "     │  (家老) │ (足軽3) │(軍師弐) │"
+echo "     │  karo   │ gunshi  │ gunshi2 │"
+echo "     │  (家老) │(軍師壱) │(軍師弐) │"
 echo "     ├─────────┼─────────┼─────────┤"
-echo "     │ashigaru1│ashigaru4│ashigaru7│"
-echo "     │ (足軽1) │ (足軽4) │ (足軽7) │"
+echo "     │ashigaru1│ashigaru2│ashigaru3│"
+echo "     │ (足軽1) │ (足軽2) │ (足軽3) │"
 echo "     ├─────────┼─────────┼─────────┤"
-echo "     │ashigaru2│ashigaru5│ gunshi  │"
-echo "     │ (足軽2) │ (足軽5) │(軍師壱) │"
+echo "     │ashigaru4│ashigaru5│ashigaru7│"
+echo "     │ (足軽4) │ (足軽5) │ (足軽7) │"
 echo "     └─────────┴─────────┴─────────┘"
 echo ""
 
