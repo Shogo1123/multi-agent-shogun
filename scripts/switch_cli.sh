@@ -111,7 +111,7 @@ update_settings_yaml() {
     log "Updating settings.yaml: ${agent_id} → type=${new_type:-<unchanged>}, model=${new_model:-<unchanged>}"
 
     "${PROJECT_ROOT}/.venv/bin/python3" << PYEOF
-import yaml, sys, os, datetime
+import sys, os, datetime
 
 settings_path = "${SETTINGS_FILE}"
 agent_id = "${agent_id}"
@@ -121,80 +121,81 @@ new_model = "${new_model}" or None
 with open(settings_path, 'r', encoding='utf-8') as f:
     content = f.read()
 
-with open(settings_path, 'r', encoding='utf-8') as f:
-    data = yaml.safe_load(f) or {}
-
-cli = data.setdefault('cli', {})
-agents = cli.setdefault('agents', {})
-agent_cfg = agents.get(agent_id)
-if not isinstance(agent_cfg, dict):
-    agent_cfg = {}
-    agents[agent_id] = agent_cfg
-
 timestamp = datetime.datetime.now().strftime('%Y-%m-%d')
 comment = f"# {timestamp}: switch_cli.sh による切替"
 
-if new_type:
-    agent_cfg['type'] = new_type
-if new_model:
-    agent_cfg['model'] = new_model
-
-data['cli']['agents'][agent_id] = agent_cfg
-
-# コメント保持のため、対象エージェント行だけsedで置換する方が安全だが
-# 完全性のためyaml.dumpを使用。コメントは失われる。
-# → 代わりにsed的なアプローチ: 対象ブロックだけ書き換える
-
-# Simple approach: read lines, find agent block, replace
+# Line-by-line approach: find the agent block, replace only type/model lines,
+# preserve all other fields (reasoning_effort, thinking, etc.).
+# Block membership: indent deeper than agent_indent (comments/blanks inside block are kept).
 lines = content.split('\n')
 new_lines = []
 in_agent_block = False
 agent_indent = None
-skip_until_next = False
+inner_indent = None
+type_written = False
+model_written = False
+
+def _flush_missing():
+    """Insert missing type/model lines before leaving the block."""
+    if new_type and not type_written:
+        new_lines.append(f'{inner_indent}type: {new_type}')
+    if new_model and not model_written:
+        new_lines.append(f'{inner_indent}model: {new_model}  {comment}')
 
 i = 0
 while i < len(lines):
     line = lines[i]
     stripped = line.lstrip()
 
-    # Detect our agent's block start
-    if stripped.startswith(f'{agent_id}:'):
+    if not in_agent_block and stripped.startswith(f'{agent_id}:'):
         in_agent_block = True
         agent_indent = len(line) - len(stripped)
-        new_lines.append(line)
-        # Write the updated fields
         inner_indent = ' ' * (agent_indent + 2)
-        if new_type:
-            new_lines.append(f'{inner_indent}type: {new_type}')
-        if new_model:
-            new_lines.append(f'{inner_indent}model: {new_model}  {comment}')
-        # Skip old sub-fields
-        i += 1
-        while i < len(lines):
-            next_line = lines[i]
-            next_stripped = next_line.lstrip()
-            if next_stripped == '' or next_stripped.startswith('#'):
-                # Keep blank lines and comments between blocks
-                if next_stripped.startswith('#') and len(next_line) - len(next_stripped) > agent_indent:
-                    i += 1
-                    continue
-                break
-            next_indent = len(next_line) - len(next_stripped)
-            if next_indent <= agent_indent:
-                break  # Next agent or section
-            i += 1
-        in_agent_block = False
-        continue
-    else:
+        type_written = False
+        model_written = False
         new_lines.append(line)
+        i += 1
+        continue
+
+    if in_agent_block:
+        # Blank lines and comments inside the block are kept as-is
+        if stripped == '' or stripped.startswith('#'):
+            new_lines.append(line)
+            i += 1
+            continue
+        current_indent = len(line) - len(stripped)
+        if current_indent <= agent_indent:
+            # Dedented → leaving the block. Insert any missing fields first.
+            _flush_missing()
+            in_agent_block = False
+            new_lines.append(line)
+            i += 1
+            continue
+
+        # Inside agent block: replace type/model, keep everything else
+        if stripped.startswith('type:') and new_type:
+            new_lines.append(f'{inner_indent}type: {new_type}')
+            type_written = True
+        elif stripped.startswith('model:') and new_model:
+            new_lines.append(f'{inner_indent}model: {new_model}  {comment}')
+            model_written = True
+        else:
+            new_lines.append(line)
+        i += 1
+        continue
+
+    new_lines.append(line)
     i += 1
 
+# If the file ends while still in the agent block, flush missing fields
+if in_agent_block:
+    _flush_missing()
+
 with open(settings_path, 'w', encoding='utf-8') as f:
-    f.write('\n'.join(new_lines))
-    if not content.endswith('\n'):
-        pass
-    else:
-        f.write('\n') if not '\n'.join(new_lines).endswith('\n') else None
+    out = '\n'.join(new_lines)
+    f.write(out)
+    if content.endswith('\n') and not out.endswith('\n'):
+        f.write('\n')
 
 print("OK")
 PYEOF

@@ -154,6 +154,12 @@ build_cli_command() {
             if [[ -n "$model" ]]; then
                 cmd="$cmd --model $model"
             fi
+            # reasoning_effort: low/medium/high/xhigh (Codex CLI -c option)
+            local reasoning_effort
+            reasoning_effort=$(_cli_adapter_read_yaml "cli.agents.${agent_id}.reasoning_effort" "")
+            if [[ -n "$reasoning_effort" ]]; then
+                cmd="$cmd -c model_reasoning_effort=\"$reasoning_effort\""
+            fi
             cmd="$cmd --search --dangerously-bypass-approvals-and-sandbox --no-alt-screen"
             echo "$cmd"
             ;;
