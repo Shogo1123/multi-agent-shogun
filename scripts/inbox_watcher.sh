@@ -826,15 +826,41 @@ send_wakeup() {
         sleep 0.3
     fi
 
-    if timeout 5 tmux send-keys -t "$PANE_TARGET" "$nudge" 2>/dev/null; then
+    # 行クリア（残存テキスト除去）→ nudge送信 → Enter → 確認 → 最大2回リトライ
+    local max_retries=2
+    local attempt=0
+    while [ $attempt -le $max_retries ]; do
+        # C-u で行をクリア
+        timeout 5 tmux send-keys -t "$PANE_TARGET" C-u 2>/dev/null || true
+        sleep 0.3
+        # nudge 送信
+        if ! timeout 5 tmux send-keys -t "$PANE_TARGET" "$nudge" 2>/dev/null; then
+            echo "[$(date)] WARNING: send-keys nudge failed for $AGENT_ID (attempt $((attempt+1)))" >&2
+            attempt=$((attempt+1))
+            continue
+        fi
         sleep 0.3
         timeout 5 tmux send-keys -t "$PANE_TARGET" Enter 2>/dev/null || true
-        rm -f "${IDLE_FLAG_DIR:-/tmp}/shogun_idle_${AGENT_ID}"
-        echo "[$(date)] Wake-up sent to $AGENT_ID (${unread_count} unread)" >&2
+        sleep 0.5
+        # 送信確認: capture-pane でプロンプトにnudgeテキストが残っていないか確認
+        local pane_content
+        pane_content=$(timeout 3 tmux capture-pane -t "$PANE_TARGET" -p 2>/dev/null | tail -5 || echo "")
+        if echo "$pane_content" | grep -qF "$nudge"; then
+            # nudgeテキストが残存 → 送信失敗 → C-u クリアしてリトライ
+            echo "[$(date)] WARNING: nudge text still visible in pane, retrying (attempt $((attempt+1)))" >&2
+            timeout 5 tmux send-keys -t "$PANE_TARGET" C-u 2>/dev/null || true
+            sleep 0.3
+            attempt=$((attempt+1))
+            continue
+        fi
+        # 送信成功
+        # NOTE: アイドルフラグは削除しない。nudge送信≠エージェント起動確認。
+        # フラグを消すと agent_is_busy()=true → 以降のnudge全スキップ → デッドロック。
+        # フラグはエージェントが実際に作業開始した時に自然消滅する（stop_hook設計と整合）。
+        echo "[$(date)] Wake-up sent to $AGENT_ID (${unread_count} unread, attempt $((attempt+1)))" >&2
         return 0
-    fi
-
-    echo "[$(date)] WARNING: send-keys failed or timed out for $AGENT_ID" >&2
+    done
+    echo "[$(date)] WARNING: send-keys failed after $max_retries retries for $AGENT_ID" >&2
     return 0  # Never return 1 — set -euo pipefail would kill the watcher daemon
 }
 

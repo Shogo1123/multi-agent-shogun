@@ -143,6 +143,11 @@
 !skills/shogun-model-switch/SKILL.md
 !skills/shogun-readme-sync/
 !skills/shogun-readme-sync/SKILL.md
+!skills/shogun-screenshot/
+!skills/shogun-screenshot/SKILL.md
+!skills/shogun-screenshot/scripts/
+!skills/shogun-screenshot/scripts/*.sh
+!skills/shogun-screenshot/scripts/*.py
 
 # Python venv (explicit deny — whitelist patterns like LICENSE leak through !*/)
 .venv/

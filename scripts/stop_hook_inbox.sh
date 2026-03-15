@@ -39,6 +39,14 @@ if [ -z "$AGENT_ID" ]; then
     exit 0
 fi
 
+# Shogun is the Lord's conversation pane — skip stop hook entirely
+if [ "$AGENT_ID" = "shogun" ]; then
+    exit 0
+fi
+
+# ─── Define inbox path early (used in multiple places below) ───
+INBOX="$SCRIPT_DIR/queue/inbox/${AGENT_ID}.yaml"
+
 # ─── Infinite loop prevention ───
 # When stop_hook_active=true, the agent is already continuing from a
 # previous Stop hook block. Allow it to stop this time to prevent loops.
@@ -50,7 +58,23 @@ if [ "$STOP_HOOK_ACTIVE" = "True" ]; then
     # caused a deadlock: agent idle but watcher thinks busy → no nudge → stuck.
     FLAG="${IDLE_FLAG_DIR:-/tmp}/shogun_idle_${AGENT_ID}"
     touch "$FLAG"
-    exit 0
+    # stop_hook_active=True 時も inotifywait 待機（連続処理ループ対応）
+    # タイムアウト(55秒)でexit 0 → ループは有限回で終了
+    WATCH_TARGETS_ACTIVE=("$INBOX")
+    if [ "$AGENT_ID" = "shogun" ]; then
+        WATCH_TARGETS_ACTIVE+=("$SCRIPT_DIR/dashboard.md")
+    fi
+    if command -v inotifywait &>/dev/null; then
+        inotifywait -e close_write -e moved_to \
+            --timeout 55 \
+            "${WATCH_TARGETS_ACTIVE[@]}" 2>/dev/null || true
+    fi
+    UNREAD_COUNT=$(grep -c 'read: false' "$INBOX" 2>/dev/null || true)
+    if [ "${UNREAD_COUNT:-0}" -eq 0 ]; then
+        exit 0
+    fi
+    # 未読あり → fall through to block response (but still from active state)
+    # Reset STOP_HOOK_ACTIVE flag logic: treat as fresh inbox check
 fi
 
 # ─── Analyze last_assistant_message (v2.1.47+) ───
@@ -94,7 +118,26 @@ UNREAD_COUNT=$(grep -c 'read: false' "$INBOX" 2>/dev/null || true)
 FLAG="${IDLE_FLAG_DIR:-/tmp}/shogun_idle_${AGENT_ID}"
 if [ "${UNREAD_COUNT:-0}" -eq 0 ]; then
     touch "$FLAG"
-    exit 0
+    # inotifywait で inbox 変更を最大55秒待機
+    # dashboard.md も監視（shogunの場合のみ）
+    WATCH_TARGETS=("$INBOX")
+    if [ "$AGENT_ID" = "shogun" ]; then
+        WATCH_TARGETS+=("$SCRIPT_DIR/dashboard.md")
+    fi
+    if command -v inotifywait &>/dev/null; then
+        inotifywait -e close_write -e moved_to \
+            --timeout 55 \
+            "${WATCH_TARGETS[@]}" 2>/dev/null || true
+    else
+        # inotifywait not available: fall through to exit 0
+        :
+    fi
+    # 待機後に再チェック
+    UNREAD_COUNT=$(grep -c 'read: false' "$INBOX" 2>/dev/null || true)
+    if [ "${UNREAD_COUNT:-0}" -eq 0 ]; then
+        exit 0
+    fi
+    # 未読あり → fall through to block response below
 fi
 # NOTE: Do NOT rm -f the flag here. The old logic removed the flag when
 # unread > 0 and blocked the stop, expecting the re-fired stop_hook

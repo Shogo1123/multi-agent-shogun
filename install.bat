@@ -36,7 +36,7 @@ if %ERRORLEVEL% NEQ 0 (
     )
 
     echo   Installing WSL2...
-    wsl --install --no-launch
+    powershell -Command "wsl --install --no-launch"
 
     echo.
     echo   +============================================================+
@@ -71,7 +71,7 @@ echo   Ubuntu not found. Installing automatically...
 echo   Ubuntu が見つかりません。自動インストール中...
 echo.
 
-wsl --install -d Ubuntu --no-launch
+powershell -Command "wsl --install -d Ubuntu --no-launch"
 
 echo.
 echo   +============================================================+

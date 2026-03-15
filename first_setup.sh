@@ -300,6 +300,10 @@ if [ -f "$VENV_DIR/bin/python3" ] && "$VENV_DIR/bin/python3" -c "import yaml" 2>
 else
     log_info "Python venv をセットアップ中..."
     if command -v python3 &> /dev/null; then
+        if command -v apt-get &> /dev/null; then
+            sudo apt-get update -qq 2>/dev/null
+            sudo apt-get install -y python3-venv 2>/dev/null
+        fi
         if python3 -m venv "$VENV_DIR" 2>/dev/null; then
             log_success "venv 作成完了: $VENV_DIR"
             if [ -f "$SCRIPT_DIR/requirements.txt" ]; then

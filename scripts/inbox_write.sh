@@ -26,8 +26,9 @@ if [ ! -f "$INBOX" ]; then
     echo "messages: []" > "$INBOX"
 fi
 
-# Generate unique message ID (timestamp-based)
-MSG_ID="msg_$(date +%Y%m%d_%H%M%S)_$(head -c 4 /dev/urandom | xxd -p)"
+# Generate unique message ID (timestamp + 4 random bytes).
+# Use `od` instead of `xxd` because `od` is available on both GNU/Linux and macOS runners by default.
+MSG_ID="msg_$(date +%Y%m%d_%H%M%S)_$(od -An -N4 -tx1 /dev/urandom | tr -d ' \n')"
 TIMESTAMP=$(date "+%Y-%m-%dT%H:%M:%S")
 
 # Cross-platform lock: flock (Linux) or mkdir (macOS fallback)

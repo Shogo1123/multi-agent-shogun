@@ -4,6 +4,7 @@ description: |
   エージェントのCLI/モデルをライブ切替するスキル。settings.yaml更新→/exit→新CLI起動→
   pane metadata更新を一発で実行。Thinking有無も制御。
   「モデル切替」「Sonnetにして」「Opusに変えて」「足軽全員切替」「Thinking切って」で起動。
+argument-hint: "[agent-name target-model e.g. ashigaru1 sonnet]"
 allowed-tools: Bash(bash scripts/switch_cli.sh *), Read, Edit
 ---
 
